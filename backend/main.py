@@ -21,6 +21,7 @@ from analysis.indicators import calcular_indicadores, ensure_monthly_normals
 from engine.crop_ranker import rank_crops, compute_crop_score, _load_crops
 from engine.rotation import build_rotation, suggest_next_crop
 from services.nasa_power import obtener_clima
+from services.nasa_harvester import get_satellite_readings, build_field_analytics
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -63,7 +64,9 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
     if archivo_cache.exists():
         try:
             cached_data = json.loads(archivo_cache.read_text(encoding="utf-8"))
-            return ensure_monthly_normals(cached_data)
+            res = ensure_monthly_normals(cached_data)
+            res["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, res)
+            return res
         except Exception as e:
             logger.warning(f"Error al leer caché {archivo_cache}: {e}")
 
@@ -74,6 +77,7 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
         archivo_cache.write_text(
             json.dumps(resultado, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        resultado["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, resultado)
         return resultado
     except Exception as e:
         logger.error(f"Fallo al procesar clima de NASA POWER: {e}")
@@ -84,7 +88,9 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
             fb = json.loads(caches[0].read_text(encoding="utf-8"))
             fb["location"] = {"latitude": lat, "longitude": lon}
             fb["fallback"] = True
-            return ensure_monthly_normals(fb)
+            fb = ensure_monthly_normals(fb)
+            fb["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, fb)
+            return fb
         raise HTTPException(
             status_code=502,
             detail=f"No se pudieron obtener datos climáticos para ({lat}, {lon}): {e}",
@@ -238,6 +244,60 @@ def compare(req: CompareRequest):
     if mock_file.exists():
         return json.loads(mock_file.read_text(encoding="utf-8"))
     return {"message": "Simulación comparativa generada"}
+
+
+@app.get("/api/v1/satellite-readings", tags=["Satelital"])
+def get_satellite_endpoint(
+    lat: float = Query(..., ge=-90, le=90, description="Latitud del lote"),
+    lon: float = Query(..., ge=-180, le=180, description="Longitud del lote"),
+):
+    """
+    Retorna lecturas satelitales en tiempo real según los recursos oficiales NASA del desafío:
+    - NASA SMAP: Humedad superficial (0-5 cm) y en zona radicular (0-100 cm).
+    - NASA GPM IMERG & OpenET: Balance hídrico de 30 días, SPI-3 y riesgo de sequía.
+    - NASA HLS / ECOSTRESS: NDVI estimado y estrés de canopia (ESI).
+    """
+    climate_data = get_climate_data(lat, lon)
+    return get_satellite_readings(lat, lon, climate_data)
+
+
+@app.get("/api/v1/field-analytics", tags=["Analítica"])
+def get_field_analytics_endpoint(
+    lat: float = Query(..., ge=-90, le=90, description="Latitud del lote"),
+    lon: float = Query(..., ge=-180, le=180, description="Longitud del lote"),
+    planting_month: int = Query(default=10, ge=1, le=12, description="Mes de siembra previsto (1-12)"),
+    cycle_months: int = Query(default=4, ge=2, le=8, description="Duración promedio del ciclo en meses"),
+    num_cycles: int = Query(default=3, ge=1, le=10, description="Cantidad de ciclos o cultivos sucesivos en la rotación"),
+    previous_crops: Optional[str] = Query(default=None, description="Cultivos anteriores separados por comas (hasta 3), ej: 'soja,trigo,maiz'"),
+):
+    """
+    Retorna el informe integral de analítica agronómica y satelital (Field Analytics):
+    perfil del lote, humedad de suelo NASA SMAP, balance hídrico GPM/OpenET, vegetación HLS,
+    ranking y rotación sucesoria óptima con justificación técnica.
+    """
+    climate_data = get_climate_data(lat, lon)
+    prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()] if previous_crops else None
+
+    ranking = rank_crops(
+        climate_data=climate_data,
+        planting_month=planting_month,
+        cycle_months=cycle_months,
+        previous_crops=prev_list,
+    )
+    rotation_plan = build_rotation(
+        climate_data=climate_data,
+        num_cycles=num_cycles,
+        start_month=planting_month,
+        previous_crops=prev_list,
+    )
+    return build_field_analytics(
+        lat=lat,
+        lon=lon,
+        climate_data=climate_data,
+        ranking_data=ranking,
+        rotation_plan=rotation_plan,
+        previous_crops=prev_list,
+    )
 
 
 # ─── Servir aplicación Frontend estática ───────────────────────────────────
