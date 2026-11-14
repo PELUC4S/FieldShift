@@ -819,130 +819,6 @@ main {
 .rot-list-title.warnings { color: var(--red); }
 
 /* ═══════════════════════════════════════════
-   CLIMATE PANEL
-   ═══════════════════════════════════════════ */
-.collapsible-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-  padding: 1rem 1.25rem;
-  background: var(--white);
-  border-radius: var(--radius);
-  box-shadow: var(--card-shadow);
-  margin-bottom: .5rem;
-  transition: background var(--transition);
-}
-
-.collapsible-header:hover { background: #fafaf5; }
-
-.collapsible-header .chevron {
-  transition: transform var(--transition);
-  font-size: 1.2rem;
-  color: #999;
-}
-
-.collapsible-header.open .chevron { transform: rotate(180deg); }
-
-.collapsible-body {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height .45s ease;
-}
-
-.collapsible-body.open {
-  max-height: 1200px;
-}
-
-.climate-content {
-  background: var(--white);
-  border-radius: var(--radius);
-  box-shadow: var(--card-shadow);
-  padding: 1.5rem;
-}
-
-.chart-section {
-  margin-bottom: 1.5rem;
-}
-
-.chart-section:last-child { margin-bottom: 0; }
-
-.chart-label {
-  font-size: .85rem;
-  font-weight: 700;
-  color: var(--dark-green);
-  margin-bottom: .6rem;
-}
-
-/* CSS bar chart */
-.css-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 130px;
-  padding-top: 1rem;
-  position: relative;
-}
-
-.css-chart .bar-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-  justify-content: flex-end;
-}
-
-.css-chart .bar {
-  width: 100%;
-  max-width: 36px;
-  border-radius: 4px 4px 0 0;
-  transition: height .8s ease;
-  position: relative;
-  min-height: 2px;
-}
-
-.css-chart .bar-col .val {
-  font-size: .62rem;
-  color: #999;
-  margin-bottom: 2px;
-  font-weight: 600;
-}
-
-.css-chart .bar-col .mo {
-  font-size: .62rem;
-  color: #777;
-  margin-top: 4px;
-  font-weight: 600;
-}
-
-.bar.temp { background: linear-gradient(to top, #ff9800, #f44336); }
-.bar.rain { background: linear-gradient(to top, #42a5f5, #1565c0); }
-.bar.frost-highlight { box-shadow: inset 0 0 0 2px var(--blue-frost); }
-.bar.heat-highlight  { box-shadow: inset 0 0 0 2px var(--red); }
-
-.chart-legend {
-  display: flex;
-  gap: 1rem;
-  margin-top: .6rem;
-  font-size: .72rem;
-  color: #888;
-}
-
-.chart-legend span {
-  display: flex;
-  align-items: center;
-  gap: .3rem;
-}
-
-.legend-dot {
-  width: 10px; height: 10px;
-  border-radius: 2px;
-  display: inline-block;
-}
-
-/* ═══════════════════════════════════════════
    UTILITY
    ═══════════════════════════════════════════ */
 .hidden { display: none !important; }
@@ -1096,17 +972,6 @@ footer {
       <div class="timeline" id="timeline"></div>
       <div class="rotation-summary hidden" id="rotationSummary"></div>
     </div>
-
-    <!-- Climate panel -->
-    <div class="hidden mt-2" id="climateSection">
-      <div class="collapsible-header" id="climateToggle">
-        <span class="section-heading" style="margin:0">🌡️ Contexto Climático</span>
-        <span class="chevron">▼</span>
-      </div>
-      <div class="collapsible-body" id="climateBody">
-        <div class="climate-content" id="climateContent"></div>
-      </div>
-    </div>
   </section>
 </main>
 
@@ -1148,10 +1013,6 @@ footer {
   const $rotSection     = document.getElementById('rotationSection');
   const $timeline       = document.getElementById('timeline');
   const $rotSummary     = document.getElementById('rotationSummary');
-  const $climateSection = document.getElementById('climateSection');
-  const $climateToggle  = document.getElementById('climateToggle');
-  const $climateBody    = document.getElementById('climateBody');
-  const $climateContent = document.getElementById('climateContent');
 
   // ──── Range slider live values ────
   $cycle.addEventListener('input', () => $cycleVal.textContent = $cycle.value);
@@ -1159,12 +1020,6 @@ footer {
   $cycles.addEventListener('input', () => $cyclesVal.textContent = $cycles.value);
   $cycles.addEventListener('change', () => analyze());
   $month.addEventListener('change', () => analyze());
-
-  // ──── Climate collapse toggle ────
-  $climateToggle.addEventListener('click', () => {
-    $climateToggle.classList.toggle('open');
-    $climateBody.classList.toggle('open');
-  });
 
   // ──── Map Initialization (Leaflet + OpenStreetMap & Satellite + Canvas Fallback) ────
   initMap();
@@ -1848,7 +1703,6 @@ footer {
     showLoading(false);
     renderRanking(ranking);
     renderRotation(rotation);
-    renderClimate(climate);
   }
 
   // ──── UI helpers ────
@@ -1858,7 +1712,6 @@ footer {
       $loading.classList.remove('hidden');
       $rankSection.classList.add('hidden');
       $rotSection.classList.add('hidden');
-      $climateSection.classList.add('hidden');
     } else {
       $loading.classList.add('hidden');
     }
@@ -2117,91 +1970,6 @@ footer {
     }
 
     $rotSection.classList.remove('hidden');
-  }
-
-  // ──── Render Climate ────
-  function renderClimate(data) {
-    let normals = data.monthly_normals || (data.indicators && data.indicators.monthly_normals) || data.normals;
-
-    if (!normals && data.climate_normal_monthly) {
-      normals = [];
-      const tempAvg = data.climate_normal_monthly.temp_avg_c || {};
-      const rainMm = data.climate_normal_monthly.precip_mm || {};
-      const frostMean = data.frost_days?.mean_by_month || {};
-      const heatMean = data.heat_stress_days?.mean_by_month || {};
-      for (let m = 1; m <= 12; m++) {
-        normals.push({
-          month: m,
-          temp_mean: tempAvg[m] ?? tempAvg[String(m)] ?? 20,
-          precipitation: rainMm[m] ?? rainMm[String(m)] ?? 50,
-          frost_days: frostMean[m] ?? frostMean[String(m)] ?? 0,
-          heat_days: heatMean[m] ?? heatMean[String(m)] ?? 0,
-        });
-      }
-    }
-
-    if (!normals || !normals.length) {
-      $climateSection.classList.add('hidden');
-      return;
-    }
-
-    // Extract data
-    const temps = normals.map(m => m.temp_mean ?? m.temperature ?? m.T2M ?? 0);
-    const rains = normals.map(m => m.precipitation ?? m.rainfall ?? m.PRECTOTCORR ?? 0);
-    const frosts = normals.map(m => m.frost_days ?? m.frost ?? 0);
-    const heats = normals.map(m => m.heat_days ?? m.heat ?? m.heat_stress_days ?? 0);
-
-    const maxTemp = Math.max(...temps, 1);
-    const maxRain = Math.max(...rains, 1);
-
-    // Temperature chart
-    let tempBarsHTML = '';
-    for (let i = 0; i < 12; i++) {
-      const t = temps[i] || 0;
-      const h = (t / maxTemp) * 100;
-      const isFrost = (frosts[i] || 0) > 2;
-      const isHeat = (heats[i] || 0) > 5;
-      let extraClass = '';
-      if (isFrost) extraClass = ' frost-highlight';
-      if (isHeat) extraClass = ' heat-highlight';
-      tempBarsHTML += `
-        <div class="bar-col">
-          <span class="val">${t.toFixed(1)}°</span>
-          <div class="bar temp${extraClass}" style="height:${h}%"></div>
-          <span class="mo">${MONTHS[i].substring(0, 3)}</span>
-        </div>`;
-    }
-
-    // Rainfall chart
-    let rainBarsHTML = '';
-    for (let i = 0; i < 12; i++) {
-      const r = rains[i] || 0;
-      const h = (r / maxRain) * 100;
-      rainBarsHTML += `
-        <div class="bar-col">
-          <span class="val">${r.toFixed(0)}</span>
-          <div class="bar rain" style="height:${h}%"></div>
-          <span class="mo">${MONTHS[i].substring(0, 3)}</span>
-        </div>`;
-    }
-
-    $climateContent.innerHTML = `
-      <div class="chart-section">
-        <div class="chart-label">🌡️ Temperatura Media Mensual (°C)</div>
-        <div class="css-chart">${tempBarsHTML}</div>
-        <div class="chart-legend">
-          <span><span class="legend-dot" style="background:${'var(--blue-frost)'}; border:2px solid var(--blue-frost);"></span> Riesgo helada</span>
-          <span><span class="legend-dot" style="background:${'var(--red)'}; border:2px solid var(--red);"></span> Estrés calor</span>
-        </div>
-      </div>
-
-      <div class="chart-section">
-        <div class="chart-label">🌧️ Precipitación Mensual (mm)</div>
-        <div class="css-chart">${rainBarsHTML}</div>
-      </div>
-    `;
-
-    $climateSection.classList.remove('hidden');
   }
 
 })();
