@@ -183,13 +183,9 @@ def build_rotation(
     """
     Construye una secuencia de rotación completa.
 
-    Cada ciclo anual tiene hasta 2 slots:
-    - Slot de verano (siembra sep-dic)
-    - Slot de invierno (siembra mar-jul)
-
     Args:
         climate_data: Datos climáticos de la ubicación
-        num_cycles: Número de años (cada año = hasta 2 cultivos)
+        num_cycles: Número de ciclos/cultivos sucesivos en la rotación
         start_month: Mes de inicio de la planificación
         first_crop_key: Clave del primer cultivo (opcional, se elige el mejor)
         weights: Pesos personalizados para el ranking
@@ -206,7 +202,7 @@ def build_rotation(
     # Determinar si empezamos con slot de verano o invierno
     start_is_summer = start_month in SUMMER_MONTHS or start_month in [8, 9]
 
-    total_slots = num_cycles * 2  # Dos cultivos por año (verano + invierno)
+    total_slots = num_cycles  # Exactamente la cantidad de ciclos/cultivos solicitados
 
     for slot_idx in range(total_slots):
         # Alternar verano / invierno

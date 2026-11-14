@@ -105,7 +105,7 @@ class RotationRequest(BaseModel):
     latitude: float = Field(..., ge=-90, le=90, description="Latitud del lote")
     longitude: float = Field(..., ge=-180, le=180, description="Longitud del lote")
     start_month: int = Field(default=10, ge=1, le=12, description="Mes inicial de planificación (1-12)")
-    num_cycles: int = Field(default=3, ge=1, le=6, description="Años / ciclos de rotación")
+    num_cycles: int = Field(default=3, ge=1, le=10, description="Cantidad de ciclos o cultivos sucesivos en la rotación")
     first_crop_key: Optional[str] = Field(default=None, description="Clave de cultivo inicial forzado")
     weights: Optional[dict[str, float]] = Field(default=None, description="Ponderación de factores")
 

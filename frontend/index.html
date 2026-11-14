@@ -1058,7 +1058,7 @@ footer {
       <div class="form-group">
         <label>Ciclos de rotación</label>
         <div class="range-row">
-          <input type="range" id="inputCycles" min="2" max="6" value="3">
+          <input type="range" id="inputCycles" min="2" max="8" value="3">
           <span class="range-val" id="cyclesVal">3</span>
         </div>
       </div>
@@ -1166,7 +1166,10 @@ footer {
 
   // ──── Range slider live values ────
   $cycle.addEventListener('input', () => $cycleVal.textContent = $cycle.value);
+  $cycle.addEventListener('change', () => analyze());
   $cycles.addEventListener('input', () => $cyclesVal.textContent = $cycles.value);
+  $cycles.addEventListener('change', () => analyze());
+  $month.addEventListener('change', () => analyze());
 
   // ──── Climate collapse toggle ────
   $climateToggle.addEventListener('click', () => {
@@ -1698,7 +1701,7 @@ footer {
     const sequence = [];
     let prevKey = null, prevCrop = null;
 
-    for (let slot = 0; slot < numCycles * 2; slot++) {
+    for (let slot = 0; slot < numCycles; slot++) {
       const isSummer = startIsSummer ? (slot % 2 === 0) : (slot % 2 === 1);
       const cycleYear = Math.floor(slot / 2) + 1;
       const season = isSummer ? 'verano' : 'invierno';
