@@ -312,6 +312,125 @@ main {
   background: var(--leaf-green);
 }
 
+/* Historial de cultivos anteriores */
+.history-box {
+  background: #fdfaf2;
+  border: 1px solid #e5dfd3;
+  border-radius: 8px;
+  padding: .75rem;
+  margin-top: .4rem;
+  margin-bottom: 1.1rem;
+}
+.history-box label {
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--earth-brown);
+  margin-bottom: .45rem;
+  display: block;
+}
+.history-selects {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  margin-bottom: .45rem;
+}
+.history-item {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+.history-tag {
+  font-size: .71rem;
+  color: #666;
+  font-weight: 600;
+}
+.history-select {
+  width: 100%;
+  padding: .4rem .6rem;
+  font-size: .8rem;
+  border-radius: 6px;
+  border: 1px solid #d5d0c5;
+  background: var(--white);
+  color: #333;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.history-select:focus {
+  border-color: var(--mid-green);
+}
+
+/* History banner in results */
+.history-banner {
+  background: #f4fbf3;
+  border: 1.5px solid #c8e6c9;
+  border-radius: 8px;
+  padding: .65rem .9rem;
+  margin-bottom: 1.1rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  font-size: .8rem;
+  box-shadow: 0 2px 6px rgba(46,125,50,.06);
+}
+.history-banner-title {
+  font-weight: 700;
+  color: var(--dark-green);
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.hist-pill {
+  background: #fff;
+  border: 1px solid #a5d6a7;
+  padding: .22rem .6rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: .76rem;
+  color: #2e7d32;
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+}
+.hist-pill.target {
+  background: var(--mid-green);
+  color: #fff;
+  border-color: var(--mid-green);
+}
+.hist-arrow {
+  color: #81c784;
+  font-size: .8rem;
+}
+.badge-antecesor {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: .4rem;
+  vertical-align: middle;
+}
+.badge-antecesor.pos {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.badge-antecesor.neg {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+.crop-pred-note {
+  font-size: .71rem;
+  color: #555;
+  background: #fbf8f0;
+  border-left: 2px solid var(--gold);
+  padding: 3px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
 /* ═══════════════════════════════════════════
    RESULTS AREA
    ═══════════════════════════════════════════ */
@@ -928,6 +1047,77 @@ footer {
         </div>
       </div>
 
+      <!-- Historial de Cultivos Anteriores (Opcional) -->
+      <div class="form-group history-box">
+        <label>🌱 Historial de Cultivos Anteriores (Opcional)</label>
+        <div class="history-selects">
+          <div class="history-item">
+            <span class="history-tag">1º Anterior (más reciente / antecesor directo):</span>
+            <select id="inputPrevCrop1" class="history-select">
+              <option value="">-- Ninguno / Sin dato --</option>
+              <option value="maiz">🌽 Maíz</option>
+              <option value="soja">🫘 Soja</option>
+              <option value="trigo">🌾 Trigo</option>
+              <option value="girasol">🌻 Girasol</option>
+              <option value="sorgo">🌾 Sorgo</option>
+              <option value="cebada">🌾 Cebada</option>
+              <option value="mani">🥜 Maní</option>
+              <option value="garbanzo">🫘 Garbanzo</option>
+              <option value="algodon">☁️ Algodón</option>
+              <option value="arveja">🫛 Arveja</option>
+              <option value="vicia">🌱 Vicia</option>
+              <option value="colza">🌼 Colza</option>
+              <option value="centeno_cobertura">🌿 Centeno Cobertura</option>
+              <option value="avena">🌾 Avena</option>
+              <option value="papa">🥔 Papa</option>
+            </select>
+          </div>
+          <div class="history-item">
+            <span class="history-tag">2º Anterior (hace 2 ciclos):</span>
+            <select id="inputPrevCrop2" class="history-select">
+              <option value="">-- Ninguno / Sin dato --</option>
+              <option value="maiz">🌽 Maíz</option>
+              <option value="soja">🫘 Soja</option>
+              <option value="trigo">🌾 Trigo</option>
+              <option value="girasol">🌻 Girasol</option>
+              <option value="sorgo">🌾 Sorgo</option>
+              <option value="cebada">🌾 Cebada</option>
+              <option value="mani">🥜 Maní</option>
+              <option value="garbanzo">🫘 Garbanzo</option>
+              <option value="algodon">☁️ Algodón</option>
+              <option value="arveja">🫛 Arveja</option>
+              <option value="vicia">🌱 Vicia</option>
+              <option value="colza">🌼 Colza</option>
+              <option value="centeno_cobertura">🌿 Centeno Cobertura</option>
+              <option value="avena">🌾 Avena</option>
+              <option value="papa">🥔 Papa</option>
+            </select>
+          </div>
+          <div class="history-item">
+            <span class="history-tag">3º Anterior (hace 3 ciclos):</span>
+            <select id="inputPrevCrop3" class="history-select">
+              <option value="">-- Ninguno / Sin dato --</option>
+              <option value="maiz">🌽 Maíz</option>
+              <option value="soja">🫘 Soja</option>
+              <option value="trigo">🌾 Trigo</option>
+              <option value="girasol">🌻 Girasol</option>
+              <option value="sorgo">🌾 Sorgo</option>
+              <option value="cebada">🌾 Cebada</option>
+              <option value="mani">🥜 Maní</option>
+              <option value="garbanzo">🫘 Garbanzo</option>
+              <option value="algodon">☁️ Algodón</option>
+              <option value="arveja">🫛 Arveja</option>
+              <option value="vicia">🌱 Vicia</option>
+              <option value="colza">🌼 Colza</option>
+              <option value="centeno_cobertura">🌿 Centeno Cobertura</option>
+              <option value="avena">🌾 Avena</option>
+              <option value="papa">🥔 Papa</option>
+            </select>
+          </div>
+        </div>
+        <div class="coord-tip">💡 Ingresá hasta 3 cultivos anteriores para evaluar fijación de N residual, alternancia biológica y evitar monocultivo.</div>
+      </div>
+
       <!-- Analyze button -->
       <button class="btn-analyze" id="btnAnalyze">
         <span class="spinner"></span>
@@ -969,6 +1159,7 @@ footer {
     <!-- Rotation results -->
     <div class="hidden rotation-section" id="rotationSection">
       <div class="section-heading">🔄 Secuencia de Rotación Recomendada</div>
+      <div id="historyBannerContainer"></div>
       <div class="timeline" id="timeline"></div>
       <div class="rotation-summary hidden" id="rotationSummary"></div>
     </div>
@@ -1013,6 +1204,10 @@ footer {
   const $rotSection     = document.getElementById('rotationSection');
   const $timeline       = document.getElementById('timeline');
   const $rotSummary     = document.getElementById('rotationSummary');
+  const $prevCrop1      = document.getElementById('inputPrevCrop1');
+  const $prevCrop2      = document.getElementById('inputPrevCrop2');
+  const $prevCrop3      = document.getElementById('inputPrevCrop3');
+  const $histBanner     = document.getElementById('historyBannerContainer');
 
   // ──── Range slider live values ────
   $cycle.addEventListener('input', () => $cycleVal.textContent = $cycle.value);
@@ -1020,6 +1215,19 @@ footer {
   $cycles.addEventListener('input', () => $cyclesVal.textContent = $cycles.value);
   $cycles.addEventListener('change', () => analyze());
   $month.addEventListener('change', () => analyze());
+
+  // ──── Previous crops change listeners ────
+  [$prevCrop1, $prevCrop2, $prevCrop3].forEach(el => {
+    if (el) el.addEventListener('change', () => analyze());
+  });
+
+  function getPreviousCrops() {
+    const list = [];
+    if ($prevCrop1 && $prevCrop1.value) list.push($prevCrop1.value);
+    if ($prevCrop2 && $prevCrop2.value) list.push($prevCrop2.value);
+    if ($prevCrop3 && $prevCrop3.value) list.push($prevCrop3.value);
+    return list;
+  }
 
   // ──── Map Initialization (Leaflet + OpenStreetMap & Satellite + Canvas Fallback) ────
   initMap();
@@ -1466,10 +1674,30 @@ footer {
     };
   }
 
-  function clientRankCrops(climate, plantingMonth, cycleMonths) {
+  function clientRankCrops(climate, plantingMonth, cycleMonths, previousCrops = []) {
     const res = [];
+    const validPrev = (previousCrops || []).filter(k => k && CROPS_DB[k]);
+    const immediateKey = validPrev.length ? validPrev[0] : null;
+    const immediateCrop = immediateKey ? CROPS_DB[immediateKey] : null;
+
     for (const key in CROPS_DB) {
-      res.push(computeLocalCropScore(key, CROPS_DB[key], climate, plantingMonth, cycleMonths));
+      const crop = CROPS_DB[key];
+      const base = computeLocalCropScore(key, crop, climate, plantingMonth, cycleMonths);
+      if (immediateKey && immediateCrop) {
+        const compat = clientPredecessorCompatibility(key, crop, immediateKey, immediateCrop);
+        let bonus = compat.bonus;
+        const reasons = [...compat.reasons];
+        if (validPrev.includes(key)) {
+          bonus -= 7;
+          reasons.push('✗ Cultivo presente en historial reciente');
+        }
+        base.raw_climate_score = base.score;
+        base.rotation_bonus = Math.round(bonus * 10) / 10;
+        base.score = Math.max(0, Math.min(100, Math.round((base.score + bonus) * 10) / 10));
+        base.probability_score = base.score;
+        base.predecessor_note = reasons.join(' | ');
+      }
+      res.push(base);
     }
     res.sort((a, b) => b.score - a.score);
     return res;
@@ -1518,12 +1746,16 @@ footer {
     return false;
   }
 
-  function clientBuildRotation(climate, numCycles, startMonth, firstCropKey) {
+  function clientBuildRotation(climate, numCycles, startMonth, firstCropKey, previousCrops = []) {
     const summerMonths = [9, 10, 11, 12];
     const winterMonths = [3, 4, 5, 6, 7];
     const startIsSummer = summerMonths.includes(startMonth) || [8, 9].includes(startMonth);
     const sequence = [];
-    let prevKey = null, prevCrop = null;
+
+    const validPrev = (previousCrops || []).filter(k => k && CROPS_DB[k]);
+    let prevKey = validPrev.length ? validPrev[0] : null;
+    let prevCrop = prevKey ? CROPS_DB[prevKey] : null;
+    const historyList = [...validPrev].reverse();
 
     for (let slot = 0; slot < numCycles; slot++) {
       const isSummer = startIsSummer ? (slot % 2 === 0) : (slot % 2 === 1);
@@ -1545,10 +1777,23 @@ footer {
         plantM = isSummer ? 10 : 5;
         cycleM = Math.floor((chosenCrop.cycle_days_mid || 120) / 30) || 4;
         baseScore = computeLocalCropScore(chosenKey, chosenCrop, climate, plantM, cycleM);
-        reasons = ['Primer cultivo seleccionado'];
+        if (prevKey && prevCrop) {
+          const compat = clientPredecessorCompatibility(chosenKey, chosenCrop, prevKey, prevCrop);
+          let b = compat.bonus;
+          const r = [...compat.reasons];
+          if (validPrev.includes(chosenKey)) {
+            b -= 7;
+            r.push('✗ Cultivo en historial reciente');
+          }
+          rotBonus = b;
+          reasons = r;
+        } else {
+          rotBonus = 0;
+          reasons = ['Primer cultivo seleccionado por el usuario'];
+        }
       } else {
         let bestScore = -999;
-        const recent = sequence.slice(-2).map(s => s.crop_key);
+        const recent = [...historyList, ...sequence.map(s => s.crop_key)].slice(-3);
         for (const k in validCrops) {
           const cr = validCrops[k];
           if (prevCrop && !clientTimingCompatible(prevCrop, cr)) continue;
@@ -1557,7 +1802,11 @@ footer {
           const sc = computeLocalCropScore(k, cr, climate, pM, cM);
           const compat = clientPredecessorCompatibility(k, cr, prevKey, prevCrop);
           let b = compat.bonus;
-          if (recent.includes(k)) b -= 7;
+          const r = [...compat.reasons];
+          if (recent.includes(k)) {
+            b -= 7;
+            r.push('✗ Cultivo en rotación o historial reciente');
+          }
           const tot = sc.score + b;
           if (tot > bestScore) {
             bestScore = tot;
@@ -1565,7 +1814,7 @@ footer {
             chosenCrop = cr;
             baseScore = sc;
             rotBonus = b;
-            reasons = compat.reasons;
+            reasons = r;
             plantM = pM;
             cycleM = cM;
           }
@@ -1618,6 +1867,7 @@ footer {
 
     return {
       num_cycles: numCycles,
+      previous_crops: validPrev,
       total_crops: sequence.length,
       total_score: Math.round(avgScore * 10) / 10,
       average_score: Math.round(avgScore * 10) / 10,
@@ -1642,6 +1892,7 @@ footer {
     const month = parseInt($month.value);
     const cycle = parseInt($cycle.value);
     const numCycles = parseInt($cycles.value);
+    const previousCrops = getPreviousCrops();
 
     if (isNaN(lat) || isNaN(lon)) {
       showError('Por favor ingresá coordenadas válidas.');
@@ -1660,7 +1911,8 @@ footer {
         latitude: lat,
         longitude: lon,
         start_month: month,
-        num_cycles: numCycles
+        num_cycles: numCycles,
+        previous_crops: previousCrops
       };
       if (firstCrop) {
         rotPayload.first_crop_key = firstCrop;
@@ -1670,8 +1922,9 @@ footer {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 2500);
 
+      const prevCropsParam = previousCrops.length ? `&previous_crops=${encodeURIComponent(previousCrops.join(','))}` : '';
       const [rankingRes, rotationRes, climateRes] = await Promise.all([
-        fetch(`${API}/api/v1/ranking?lat=${lat}&lon=${lon}&planting_month=${month}&cycle_months=${cycle}`, { signal: ctrl.signal }),
+        fetch(`${API}/api/v1/ranking?lat=${lat}&lon=${lon}&planting_month=${month}&cycle_months=${cycle}${prevCropsParam}`, { signal: ctrl.signal }),
         fetch(`${API}/api/v1/rotation`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1693,8 +1946,8 @@ footer {
     } catch (err) {
       console.info('Activando motor agroclimático integrado (Modo GitHub Pages / Standalone):', err.message);
       climate = getLocalClimate(lat, lon);
-      ranking = clientRankCrops(climate, month, cycle);
-      rotation = clientBuildRotation(climate, numCycles, month, firstCrop);
+      ranking = clientRankCrops(climate, month, cycle, previousCrops);
+      rotation = clientBuildRotation(climate, numCycles, month, firstCrop, previousCrops);
     } finally {
       $btn.classList.remove('loading');
       $btn.disabled = false;
@@ -1815,7 +2068,10 @@ footer {
         <div class="card-badges">
           ${type ? `<span class="badge ${typeBadgeClass(type)}">${type}</span>` : ''}
           ${water ? `<span class="water-indicator">${waterDrops(water)}</span>` : ''}
+          ${crop.rotation_bonus ? `<span class="badge-antecesor ${crop.rotation_bonus > 0 ? 'pos' : 'neg'}">${crop.rotation_bonus > 0 ? '▲ +' : '▼ '}${crop.rotation_bonus} antecesor</span>` : ''}
         </div>
+
+        ${crop.predecessor_note ? `<div class="crop-pred-note">💡 ${crop.predecessor_note}</div>` : ''}
 
         <div class="breakdown">
           ${barRow('🌡️', 'Temp', tempFit)}
@@ -1887,11 +2143,34 @@ footer {
 
   // ──── Render Rotation ────
   function renderRotation(data) {
-    // data can be { sequence: [...], total_score, benefits, warnings } or array
+    // data can be { sequence: [...], total_score, benefits, warnings, previous_crops: [...] } or array
     const sequence = data.sequence || data.rotation || data.crops || [];
     const totalScore = data.total_score ?? data.average_score ?? 0;
     const benefits = data.benefits || data.advantages || [];
     const warnings = data.warnings || data.risks || [];
+    const prevCrops = data.previous_crops || getPreviousCrops();
+
+    if ($histBanner) {
+      if (prevCrops && prevCrops.length > 0) {
+        const pills = prevCrops.map((c, idx) => {
+          const tag = idx === 0 ? 'Antecesor directo' : `${idx + 1}º previo`;
+          return `<span class="hist-pill" title="${tag}">${getEmoji(c)} ${formatCropName(c)} <small style="opacity:.75">(${tag})</small></span>`;
+        }).reverse().join('<span class="hist-arrow">➔</span>');
+
+        $histBanner.innerHTML = `
+          <div class="history-banner">
+            <span class="history-banner-title">🌱 Historial considerado:</span>
+            ${pills}
+            <span class="hist-arrow">➔</span>
+            <span class="hist-pill target">🎯 Siguiente ciclo recomendado: ${sequence.length > 0 ? getEmoji(sequence[0].crop) + ' ' + formatCropName(sequence[0].crop) : 'Por determinar'}</span>
+          </div>
+        `;
+        $histBanner.classList.remove('hidden');
+      } else {
+        $histBanner.innerHTML = '';
+        $histBanner.classList.add('hidden');
+      }
+    }
 
     $timeline.innerHTML = '';
 
@@ -1914,8 +2193,13 @@ footer {
       if (bonus > 0) bonusHTML = `<div class="bonus-tag positive">▲ +${bonus}</div>`;
       else if (bonus < 0) bonusHTML = `<div class="bonus-tag negative">▼ ${bonus}</div>`;
 
+      const isFirstWithHistory = (i === 0 && prevCrops && prevCrops.length > 0);
+      const cycleTitle = isFirstWithHistory
+        ? 'Ciclo 1 (Siguiente cultivo recomendado)'
+        : `Ciclo ${i + 1}`;
+
       card.innerHTML = `
-        <div class="cycle-label">Ciclo ${i + 1}</div>
+        <div class="cycle-label">${cycleTitle}</div>
         <div class="crop-emoji">${getEmoji(name)}</div>
         <div class="crop-name">${formatCropName(name)}</div>
         <div class="period">${plantLabel}${harvestLabel ? ' → ' + harvestLabel : ''}</div>

@@ -334,14 +334,21 @@ def rank_crops(
     cycle_months: int = 4,
     weights: dict[str, float] | None = None,
     crops_db: dict[str, dict] | None = None,
+    previous_crops: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Rankea todos los cultivos disponibles para un mes de siembra y ubicación.
+    Si se especifican cultivos anteriores, pondera la compatibilidad agronómica
+    con el antecesor inmediato y penaliza repeticiones recientes.
 
     Retorna lista ordenada de mayor a menor puntaje con desglose completo.
     """
     crops = crops_db or _load_crops()
     results = []
+
+    valid_prev = [c.strip() for c in (previous_crops or []) if c and c.strip() in crops][:3]
+    immediate_key = valid_prev[0] if valid_prev else None
+    immediate_crop = crops.get(immediate_key) if immediate_key else None
 
     for key, crop in crops.items():
         score_data = compute_crop_score(
@@ -352,6 +359,21 @@ def rank_crops(
             cycle_months=cycle_months,
             weights=weights,
         )
+        if immediate_key and immediate_crop:
+            from .rotation import predecessor_compatibility
+            rot_bonus, reasons = predecessor_compatibility(key, crop, immediate_key, immediate_crop)
+            recency_penalty = 7.0 if key in valid_prev else 0.0
+            if recency_penalty > 0:
+                reasons.append("✗ Cultivo en historial reciente del lote")
+            net_bonus = rot_bonus - recency_penalty
+            raw_score = score_data["score"]
+            adjusted = max(0.0, min(100.0, raw_score + net_bonus))
+            score_data["raw_climate_score"] = raw_score
+            score_data["rotation_bonus"] = round(net_bonus, 1)
+            score_data["score"] = round(adjusted, 1)
+            score_data["probability_score"] = round(adjusted, 1)
+            score_data["predecessor_note"] = " | ".join(reasons) if reasons else None
+
         results.append(score_data)
 
     # Ordenar de mayor a menor puntaje

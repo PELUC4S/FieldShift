@@ -108,6 +108,7 @@ class RotationRequest(BaseModel):
     num_cycles: int = Field(default=3, ge=1, le=10, description="Cantidad de ciclos o cultivos sucesivos en la rotación")
     first_crop_key: Optional[str] = Field(default=None, description="Clave de cultivo inicial forzado")
     weights: Optional[dict[str, float]] = Field(default=None, description="Ponderación de factores")
+    previous_crops: Optional[list[str]] = Field(default=None, description="Lista opcional de hasta 3 cultivos anteriores [1º más reciente, 2º, 3º]")
 
 
 class CompareRequest(BaseModel):
@@ -153,21 +154,26 @@ def get_ranking(
     lon: float = Query(..., ge=-180, le=180, description="Longitud del lote"),
     planting_month: int = Query(..., ge=1, le=12, description="Mes de siembra previsto (1=Enero... 12=Diciembre)"),
     cycle_months: int = Query(default=4, ge=2, le=8, description="Duración promedio del ciclo en meses"),
+    previous_crops: Optional[str] = Query(default=None, description="Cultivos anteriores separados por comas (hasta 3), ej: 'soja,trigo,maiz'"),
 ):
     """
     Calcula de forma probabilística la aptitud de cada semilla de acuerdo a los datos
     históricos de NASA POWER y rankea los mejores cultivos para la ventana seleccionada.
+    Si se indican cultivos anteriores, evalúa la compatibilidad agronómica sucesoria.
     """
     climate_data = get_climate_data(lat, lon)
+    prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()] if previous_crops else None
     ranking = rank_crops(
         climate_data=climate_data,
         planting_month=planting_month,
         cycle_months=cycle_months,
+        previous_crops=prev_list,
     )
     return {
         "location": {"latitude": lat, "longitude": lon},
         "planting_month": planting_month,
         "cycle_months": cycle_months,
+        "previous_crops": prev_list,
         "total_evaluated": len(ranking),
         "best_crop": ranking[0] if ranking else None,
         "crops": ranking,
@@ -189,6 +195,7 @@ def create_rotation(req: RotationRequest):
         start_month=req.start_month,
         first_crop_key=req.first_crop_key,
         weights=req.weights,
+        previous_crops=req.previous_crops,
     )
     return rotation_plan
 

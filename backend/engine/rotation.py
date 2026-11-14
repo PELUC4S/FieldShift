@@ -179,6 +179,7 @@ def build_rotation(
     first_crop_key: str | None = None,
     weights: dict[str, float] | None = None,
     crops_db: dict[str, dict] | None = None,
+    previous_crops: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Construye una secuencia de rotación completa.
@@ -190,14 +191,19 @@ def build_rotation(
         first_crop_key: Clave del primer cultivo (opcional, se elige el mejor)
         weights: Pesos personalizados para el ranking
         crops_db: Base de datos de cultivos (opcional, carga automática)
+        previous_crops: Lista de hasta 3 cultivos anteriores [1º más reciente, 2º, 3º]
 
     Returns:
         Diccionario con la secuencia de rotación completa y métricas.
     """
     crops = crops_db or _load_crops()
     sequence: list[dict[str, Any]] = []
-    prev_key: str | None = None
-    prev_crop: dict | None = None
+
+    # Procesar historial de cultivos anteriores ingresados por el usuario
+    valid_prev = [c.strip() for c in (previous_crops or []) if c and c.strip() in crops][:3]
+    prev_key: str | None = valid_prev[0] if valid_prev else None
+    prev_crop: dict | None = crops.get(prev_key) if prev_key else None
+    history_list: list[str] = list(reversed(valid_prev))
 
     # Determinar si empezamos con slot de verano o invierno
     start_is_summer = start_month in SUMMER_MONTHS or start_month in [8, 9]
@@ -238,8 +244,17 @@ def build_rotation(
                 chosen_key, chosen_crop, climate_data,
                 planting_m, cycle_m, weights
             )
-            rotation_bonus = 0.0
-            compat_reasons = ["Primer cultivo seleccionado por el usuario"]
+            if prev_crop and prev_key:
+                rot_bonus, compat_reasons = predecessor_compatibility(
+                    chosen_key, chosen_crop, prev_key, prev_crop
+                )
+                if chosen_key in valid_prev:
+                    rot_bonus -= 7.0
+                    compat_reasons.append("✗ Cultivo presente en el historial reciente del lote")
+                rotation_bonus = rot_bonus
+            else:
+                rotation_bonus = 0.0
+                compat_reasons = ["Primer cultivo seleccionado por el usuario"]
         else:
             # Rankear cultivos válidos y elegir el mejor considerando rotación
             best_choice: dict | None = None
@@ -260,12 +275,12 @@ def build_rotation(
                     key, crop, prev_key, prev_crop
                 )
 
-                # Penalización por repetición reciente en la secuencia (fomentar diversidad plurianual)
-                recent_crops = [e["crop_key"] for e in sequence]
+                # Penalización por repetición en la secuencia o historial (fomentar diversidad plurianual)
+                recent_crops = history_list + [e["crop_key"] for e in sequence]
                 recency_penalty = 0.0
-                if key in recent_crops[-2:]:
+                if key in recent_crops[-3:]:
                     recency_penalty = 7.0
-                    reasons.append("✗ Cultivo utilizado recientemente en la rotación (desincentivo a la repetición)")
+                    reasons.append("✗ Cultivo utilizado recientemente en la rotación o historial (desincentivo a la repetición)")
 
                 total = score_data["score"] + rot_bonus - recency_penalty
 
@@ -366,6 +381,7 @@ def build_rotation(
 
     return {
         "num_cycles": num_cycles,
+        "previous_crops": valid_prev,
         "total_crops": len(sequence),
         "total_score": round(avg_score, 1),
         "average_score": round(avg_score, 1),
