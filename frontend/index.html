@@ -1012,18 +1012,7 @@ footer {
         <div class="coord-badge-info">
           <span>🎯 Coordenada activa: </span><strong id="coordDisplay">-31.42, -64.18</strong>
         </div>
-        <div class="coord-tip">💡 Podés escribir cualquier latitud y longitud, hacer clic en el mapa o elegir una región de acceso rápido.</div>
-      </div>
-
-      <!-- Presets -->
-      <div class="form-group">
-        <label>O Seleccionar Región Agrícola</label>
-        <div class="preset-chips" id="presetChips">
-          <button type="button" class="chip active" data-lat="-31.42" data-lon="-64.18">Córdoba (Centro)</button>
-          <button type="button" class="chip" data-lat="-33.89" data-lon="-60.57">Pergamino (Núcleo)</button>
-          <button type="button" class="chip" data-lat="-27.80" data-lon="-65.80">Singuil (Catamarca/NOA)</button>
-          <button type="button" class="chip" data-lat="-37.85" data-lon="-58.26">Balcarce (Sur)</button>
-        </div>
+        <div class="coord-tip">💡 Podés escribir cualquier latitud y longitud, arrastrar el marcador o hacer clic en cualquier parte del mapa.</div>
       </div>
 
       <!-- Planting month -->
@@ -1252,7 +1241,6 @@ footer {
           const pos = marker.getLatLng();
           $lat.value = pos.lat.toFixed(2);
           $lon.value = pos.lng.toFixed(2);
-          document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
           updateCoordDisplay(pos.lat, pos.lng);
           marker.setPopupContent(getPopupHtml(pos.lat, pos.lng)).openPopup();
         });
@@ -1264,7 +1252,6 @@ footer {
           $lat.value = lat.toFixed(2);
           $lon.value = lon.toFixed(2);
           marker.setLatLng([lat, lon]);
-          document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
           updateCoordDisplay(lat, lon);
           marker.setPopupContent(getPopupHtml(lat, lon)).openPopup();
         });
@@ -1367,7 +1354,6 @@ footer {
           const lat = (y / canvas.height) * (-33) + (-22);
           $lat.value = lat.toFixed(2);
           $lon.value = lon.toFixed(2);
-          document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
           syncMapLocation(lat, lon, false);
         });
       }
@@ -1375,7 +1361,6 @@ footer {
 
     // Input dinámico en vivo (al escribir o cambiar)
     function onCoordInput() {
-      document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
       const lat = parseFloat($lat.value);
       const lon = parseFloat($lon.value);
       if (!isNaN(lat) && !isNaN(lon)) {
@@ -1399,7 +1384,6 @@ footer {
             const lon = parseFloat(pos.coords.longitude.toFixed(2));
             $lat.value = lat.toFixed(2);
             $lon.value = lon.toFixed(2);
-            document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
             syncMapLocation(lat, lon, true);
             if (map) map.setView([lat, lon], 9);
             $btnGps.textContent = '✅ Ubicación detectada';
@@ -1413,21 +1397,6 @@ footer {
         );
       });
     }
-
-    // Clic en preset chips
-    document.querySelectorAll('.preset-chips .chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        const lat = parseFloat(chip.dataset.lat);
-        const lon = parseFloat(chip.dataset.lon);
-        $lat.value = lat.toFixed(2);
-        $lon.value = lon.toFixed(2);
-        syncMapLocation(lat, lon, true);
-        if (map) map.setView([lat, lon], 7);
-        analyze(); // Analizar inmediatamente al tocar un preset
-      });
-    });
 
     window.addEventListener('resize', () => {
       if (map) map.invalidateSize();
