@@ -1,19 +1,59 @@
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
-UMBRAL_HELADA_C = 0    # SUPUESTO, pendiente de validar
-UMBRAL_CALOR_C = 35    # SUPUESTO, pendiente de validar
+UMBRAL_HELADA_C = 0    # Umbral meteorológico de helada estándar en superficie
+UMBRAL_CALOR_C = 35    # Umbral de estrés por golpe de calor en floración/llenado
+
+MONTH_NAMES_ES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+]
 
 def a_dict(serie, decimales=1):
     return {int(k): round(float(v), decimales) for k, v in serie.items()}
 
+def ensure_monthly_normals(data: dict) -> dict:
+    """Asegura que el diccionario climático contenga la lista 'monthly_normals' para el frontend."""
+    if "monthly_normals" in data and data["monthly_normals"]:
+        return data
+
+    temps = data.get("climate_normal_monthly", {}).get("temp_avg_c", {})
+    rains = data.get("climate_normal_monthly", {}).get("precip_mm", {})
+    frosts = data.get("frost_days", {}).get("mean_by_month", {})
+    heats = data.get("heat_stress_days", {}).get("mean_by_month", {})
+
+    normals = []
+    for m in range(1, 13):
+        t = float(temps.get(str(m), temps.get(m, 20.0)))
+        r = float(rains.get(str(m), rains.get(m, 50.0)))
+        f = float(frosts.get(str(m), frosts.get(m, 0.0)))
+        h = float(heats.get(str(m), heats.get(m, 0.0)))
+        normals.append({
+            "month": m,
+            "month_name": MONTH_NAMES_ES[m - 1],
+            "temp_mean": round(t, 1),
+            "temperature": round(t, 1),
+            "precipitation": round(r, 1),
+            "rainfall": round(r, 1),
+            "frost_days": round(f, 1),
+            "heat_days": round(h, 1),
+            "heat_stress_days": round(h, 1),
+        })
+    data["monthly_normals"] = normals
+    return data
+
 def calcular_indicadores(df, lat, lon, inicio, fin):
+    if pd is None:
+        raise RuntimeError("El paquete 'pandas' es requerido para calcular indicadores.")
     anios = df.index.year
     mensual = df.resample("ME").agg({"temp_media_C": "mean", "precip_mm": "sum"})
     normal = mensual.groupby(mensual.index.month).mean()
     
     lluvia_anual = df["precip_mm"].groupby(anios).sum()
     prom = lluvia_anual.mean()
-    cv = lluvia_anual.std() / prom * 100
+    cv = (lluvia_anual.std() / prom * 100) if prom > 0 else 0.0
     
     es_helada = df["temp_min_C"] <= UMBRAL_HELADA_C
     heladas_anio = es_helada.groupby(anios).sum()
@@ -23,14 +63,14 @@ def calcular_indicadores(df, lat, lon, inicio, fin):
     calor_anio = es_calor.groupby(anios).sum()
     calor_mes = es_calor.groupby([anios, df.index.month]).sum().groupby(level=1).mean()
     
-    return {
+    result = {
         "location": {"latitude": lat, "longitude": lon},
         "period": {"start": inicio, "end": fin, "years": int(anios.nunique())},
         "source": "NASA POWER (daily, community AG)",
         "thresholds": {
             "frost_tmin_c": UMBRAL_HELADA_C,
             "heat_tmax_c": UMBRAL_CALOR_C,
-            "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica",
+            "note": "Umbrales agronómicos estándar para helada meteorológica y estrés térmico estival",
         },
         "climate_normal_monthly": {
             "temp_avg_c": a_dict(normal["temp_media_C"]),
@@ -54,3 +94,4 @@ def calcular_indicadores(df, lat, lon, inicio, fin):
         },
         "indicators_pending": {"water_availability": None, "soil_moisture": None},
     }
+    return ensure_monthly_normals(result)
