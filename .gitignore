@@ -38,3 +38,11 @@ wheels/
 # Environment
 .env
 .env.local
+
+# Runtime cache
+backend/data/cache/*.json
+!backend/data/cache/clima_-31.42_-64.18.json
+!backend/data/cache/clima_-33.89_-60.57.json
+!backend/data/cache/clima_-37.85_-58.26.json
+!backend/data/cache/clima_-27.5_-65.5.json
+!backend/data/cache/clima_-27.8_-65.8.json

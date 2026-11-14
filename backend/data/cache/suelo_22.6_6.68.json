@@ -1,43 +1,46 @@
 {
-  "source": "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado",
+  "source": "ISRIC SoilGrids / Bioma Arenosol Desértico Aridisol",
   "is_fallback": true,
   "coordinates": {
     "latitude": 22.6,
     "longitude": 6.68
   },
   "texture": {
-    "usda_class": "Franco",
-    "clay_pct": 20.0,
-    "silt_pct": 45.0,
-    "sand_pct": 35.0,
+    "usda_class": "Arenoso",
+    "clay_pct": 3.5,
+    "silt_pct": 5.5,
+    "sand_pct": 91.0,
     "depth_range": "0-30cm"
   },
   "water_retention": {
     "topsoil_0_30cm": {
-      "field_capacity_pct": 30.0,
-      "wilting_point_pct": 14.5,
-      "awc_pct": 15.5,
-      "awc_mm": 46.5,
+      "field_capacity_pct": 9.0,
+      "wilting_point_pct": 3.5,
+      "awc_pct": 5.5,
+      "awc_mm": 16.5,
       "role": "Germinación y emergencia (cama de siembra)"
     },
     "subsoil_30_60cm": {
-      "field_capacity_pct": 31.0,
-      "wilting_point_pct": 15.0,
-      "awc_pct": 16.0,
-      "awc_mm": 48.0,
+      "field_capacity_pct": 8.5,
+      "wilting_point_pct": 3.5,
+      "awc_pct": 5.0,
+      "awc_mm": 15.0,
       "role": "Reserva hídrica profunda (fase reproductiva)"
     },
-    "total_awc_0_60cm_mm": 94.5
+    "total_awc_0_60cm_mm": 31.5
   },
   "organic_carbon": {
-    "soc_g_kg": 17.5,
-    "organic_matter_pct": 3.02,
-    "fertility_level": "Medio",
+    "soc_g_kg": 2.1,
+    "organic_matter_pct": 0.36,
+    "fertility_level": "Muy Bajo (Suelo mineral desértico)",
     "depth_range": "0-30cm"
   },
   "acidity": {
-    "ph_h2o": 6.6,
-    "ph_class": "Neutro",
+    "ph_h2o": 8.3,
+    "ph_class": "Alcalino",
     "depth_range": "0-30cm"
-  }
+  },
+  "available_water_capacity_mm": 31.5,
+  "organic_matter_pct": 0.36,
+  "drainage": "Excesivo"
 }

@@ -244,7 +244,9 @@ def build_rotation(
                 chosen_key, chosen_crop, climate_data,
                 planting_m, cycle_m, weights
             )
-            if prev_crop and prev_key:
+            if base_score["score"] <= 0.0:
+                rotation_bonus = 0.0
+            elif prev_crop and prev_key:
                 rot_bonus, compat_reasons = predecessor_compatibility(
                     chosen_key, chosen_crop, prev_key, prev_crop
                 )
@@ -282,7 +284,12 @@ def build_rotation(
                     recency_penalty = 7.0
                     reasons.append("✗ Cultivo utilizado recientemente en la rotación o historial (desincentivo a la repetición)")
 
-                total = score_data["score"] + rot_bonus - recency_penalty
+                if score_data["score"] <= 0.0:
+                    rot_bonus = 0.0
+                    recency_penalty = 0.0
+                    total = 0.0
+                else:
+                    total = max(0.0, score_data["score"] + rot_bonus - recency_penalty)
 
                 if total > best_total_score:
                     best_total_score = total

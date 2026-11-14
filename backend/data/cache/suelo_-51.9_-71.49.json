@@ -1,5 +1,5 @@
 {
-  "source": "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado",
+  "source": "SoilGrids (ISRIC) / Mollisol Templado Estándar",
   "is_fallback": true,
   "coordinates": {
     "latitude": -51.9,
@@ -7,31 +7,31 @@
   },
   "texture": {
     "usda_class": "Franco",
-    "clay_pct": 20.0,
-    "silt_pct": 45.0,
-    "sand_pct": 35.0,
+    "clay_pct": 22.0,
+    "silt_pct": 40.0,
+    "sand_pct": 38.0,
     "depth_range": "0-30cm"
   },
   "water_retention": {
     "topsoil_0_30cm": {
-      "field_capacity_pct": 30.0,
-      "wilting_point_pct": 14.5,
-      "awc_pct": 15.5,
-      "awc_mm": 46.5,
+      "field_capacity_pct": 28.0,
+      "wilting_point_pct": 14.0,
+      "awc_pct": 14.0,
+      "awc_mm": 42.0,
       "role": "Germinación y emergencia (cama de siembra)"
     },
     "subsoil_30_60cm": {
-      "field_capacity_pct": 31.0,
-      "wilting_point_pct": 15.0,
-      "awc_pct": 16.0,
-      "awc_mm": 48.0,
+      "field_capacity_pct": 29.0,
+      "wilting_point_pct": 14.5,
+      "awc_pct": 14.5,
+      "awc_mm": 43.5,
       "role": "Reserva hídrica profunda (fase reproductiva)"
     },
-    "total_awc_0_60cm_mm": 94.5
+    "total_awc_0_60cm_mm": 85.5
   },
   "organic_carbon": {
-    "soc_g_kg": 17.5,
-    "organic_matter_pct": 3.02,
+    "soc_g_kg": 18.0,
+    "organic_matter_pct": 3.1,
     "fertility_level": "Medio",
     "depth_range": "0-30cm"
   },
@@ -39,5 +39,8 @@
     "ph_h2o": 6.6,
     "ph_class": "Neutro",
     "depth_range": "0-30cm"
-  }
+  },
+  "available_water_capacity_mm": 85.5,
+  "organic_matter_pct": 3.1,
+  "drainage": "Bueno a moderado"
 }

@@ -284,8 +284,21 @@ def compute_crop_score(
 
     soil_water_reserve_mm = round(awc_total_mm * (root_pct / 100.0), 1)
 
-    # 2. Verificar ventana biológica de siembra
-    sowing_months = crop.get("sowing_months", [])
+    loc = climate_data.get("location", {})
+    lat = loc.get("latitude", loc.get("lat", 0.0))
+
+    # 2. Verificar ventana biológica de siembra con desfasaje hemisférico
+    base_sowing_months = crop.get("sowing_months", [])
+    base_harvest_months = crop.get("harvest_months", [])
+
+    if lat >= 0:
+        # Hemisferio Norte: desfasar 6 meses respecto al calendario base del Cono Sur
+        sowing_months = [((m - 1 + 6) % 12) + 1 for m in base_sowing_months]
+        harvest_months = [((m - 1 + 6) % 12) + 1 for m in base_harvest_months]
+    else:
+        sowing_months = list(base_sowing_months)
+        harvest_months = list(base_harvest_months)
+
     is_valid_sowing = planting_month in sowing_months
     
     # Tolerancia de ventana: si está a 1 mes de la ventana óptima
@@ -299,8 +312,11 @@ def compute_crop_score(
         sowing_factor = 0.85
         sowing_penalty = 15.0
     else:
-        sowing_factor = 0.40
+        sowing_factor = 0.35
         sowing_penalty = 50.0
+
+    # Extraer temperatura del mes de siembra
+    plant_temp = monthly_temp.get(str(planting_month), monthly_temp.get(planting_month, 20.0))
 
     # 3. Calcular componentes individuales de aptitud (0 a 100)
     temp_fit = temperature_fitness(crop, monthly_temp, planting_month, cycle_months)
@@ -372,25 +388,48 @@ def compute_crop_score(
         ph_rationale = f"✓ Acidez (pH {ph}): rango óptimo para desarrollo radicular y absorción de nutrientes."
 
     water_rationale = f"Suelo {usda_text} (AWC: {awc_total_mm} mm en 0-60cm): reserva útil en perfil {soil_water_reserve_mm} mm (SMAP {root_pct}%)."
-    soil_rationale = [water_rationale]
-    if soc_rationale:
-        soil_rationale.append(soc_rationale)
-    if ph_rationale:
-        soil_rationale.append(ph_rationale)
 
-    # 5. Suma ponderada de índices de seguridad y aptitud climática
-    base_climate_fitness = (
-        w["w_temp"] * temp_fit
-        + w["w_precip"] * precip_fit
-        + w["w_frost"] * frost_safety
-        + w["w_heat"] * heat_safety
-        + w["w_var"] * rain_stability
-    )
+    # 5. Evaluación de Umbrales Críticos / Ley del Mínimo de Liebig
+    frost_tol = crop.get("frost_tolerance", "media")
+    is_frozen_soil = (plant_temp < 0.0) or ("permafrost" in usda_text.lower())
+    is_lethal_climate = (temp_fit <= 0.0) or (frost_pen >= 85.0 and frost_tol in ["nula", "baja"])
 
-    # Multiplicar por factor de ventana de siembra biológica y aplicar suelo
-    base_score = base_climate_fitness * sowing_factor
-    soil_modifier = round((soc_mod + ph_mod) * sowing_factor, 1)
-    final_score = max(0.0, min(100.0, base_score + soil_modifier))
+    if is_frozen_soil or is_lethal_climate:
+        base_climate_fitness = 0.0
+        sowing_factor = 0.0
+        soil_modifier = 0.0
+        final_score = 0.0
+        if is_frozen_soil:
+            fatal_msg = f"❄️ Inviable por Suelo Congelado / Criosfera (T mes {planting_month}: {plant_temp}°C). Germinación e implantación biológicamente imposibles (Ley del Mínimo de Liebig)."
+        else:
+            fatal_msg = f"❄️ Inviable por Régimen Térmico Letal (Aptitud térmica: 0% / Heladas: {round(frost_pen)}%). Cultivo biológicamente inviable en esta latitud y mes (Ley de Liebig)."
+        soil_rationale = [fatal_msg, water_rationale]
+        if soc_rationale:
+            soil_rationale.append(soc_rationale)
+        if ph_rationale:
+            soil_rationale.append(ph_rationale)
+    else:
+        soil_rationale = [water_rationale]
+        if soc_rationale:
+            soil_rationale.append(soc_rationale)
+        if ph_rationale:
+            soil_rationale.append(ph_rationale)
+
+        # Modulación de aptitud climática mediante compuerta térmica (Thermal Gating):
+        # La falta de temperatura adecuada no puede ser compensada linealmente por agua
+        thermal_gate = (temp_fit / 100.0) ** 0.6
+        base_climate_fitness = (
+            w["w_temp"] * temp_fit
+            + w["w_precip"] * precip_fit
+            + w["w_frost"] * frost_safety
+            + w["w_heat"] * heat_safety
+            + w["w_var"] * rain_stability
+        ) * thermal_gate
+
+        # Multiplicar por factor de ventana de siembra biológica y aplicar suelo
+        base_score = base_climate_fitness * sowing_factor
+        soil_modifier = round((soc_mod + ph_mod) * sowing_factor, 1)
+        final_score = max(0.0, min(100.0, base_score + soil_modifier))
 
     crop_name = crop_key.replace("_", " ").title()
 
@@ -411,8 +450,8 @@ def compute_crop_score(
         "frost_tolerance": crop.get("frost_tolerance", "media"),
         "heat_tolerance": crop.get("heat_tolerance", "media"),
         "soil_nitrogen_effect": crop.get("soil_nitrogen_effect", "neutral"),
-        "sowing_months": crop.get("sowing_months", []),
-        "harvest_months": crop.get("harvest_months", []),
+        "sowing_months": sowing_months,
+        "harvest_months": harvest_months,
         "breakdown": {
             "temperature_fitness": round(temp_fit, 1),
             "precipitation_fitness": round(precip_fit, 1),
@@ -487,7 +526,11 @@ def rank_crops(
             effective_bonus = round(net_bonus * sow_factor, 1)
 
             raw_score = score_data["score"]
-            adjusted = max(0.0, min(100.0, raw_score + effective_bonus))
+            if raw_score <= 0.0:
+                adjusted = 0.0
+                effective_bonus = 0.0
+            else:
+                adjusted = max(0.0, min(100.0, raw_score + effective_bonus))
             score_data["raw_climate_score"] = raw_score
             score_data["rotation_bonus"] = effective_bonus
             score_data["score"] = round(adjusted, 1)
