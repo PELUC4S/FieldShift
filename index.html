@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FieldShift — Predicción de Rotación de Cultivos</title>
+<!-- Leaflet.js para mapa dinámico interactivo con capas Satelital y Callejero -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
 /* ═══════════════════════════════════════════
    CSS RESET & VARIABLES
@@ -230,16 +233,23 @@ main {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Map placeholder */
+/* Map container & Leaflet styling */
 .map-container {
   width: 100%;
-  height: 160px;
+  height: 250px;
   background: var(--cream);
   border-radius: 8px;
   border: 1.5px solid #d5d0c5;
   overflow: hidden;
   position: relative;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
+  z-index: 1;
+}
+
+#leafletMap {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 
 .map-container .map-placeholder {
@@ -260,6 +270,46 @@ main {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.map-hint {
+  font-size: .74rem;
+  color: #555;
+  background: #fdfaf2;
+  border-left: 3px solid var(--gold);
+  padding: .35rem .6rem;
+  border-radius: 4px;
+  margin-bottom: 0.9rem;
+  line-height: 1.35;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  font-family: var(--font);
+  box-shadow: 0 4px 14px rgba(0,0,0,.2);
+}
+.leaflet-popup-content {
+  margin: 10px 14px;
+  line-height: 1.4;
+  font-size: .82rem;
+}
+.btn-popup-analyze {
+  margin-top: 6px;
+  display: block;
+  width: 100%;
+  background: var(--mid-green);
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: .78rem;
+  text-align: center;
+  transition: background .2s;
+}
+.btn-popup-analyze:hover {
+  background: var(--leaf-green);
 }
 
 /* ═══════════════════════════════════════════
@@ -935,12 +985,16 @@ footer {
 
       <!-- Map placeholder -->
       <div class="map-container" id="mapContainer">
-        <div class="map-placeholder" id="mapPlaceholder">
+        <div id="leafletMap"></div>
+        <div class="map-placeholder hidden" id="mapPlaceholder">
           <span class="pin">📌</span>
           <span>Mapa de ubicación</span>
           <span style="font-size:.72rem;color:#bbb">Haz clic para marcar posición</span>
         </div>
         <canvas id="mapCanvas" class="hidden"></canvas>
+      </div>
+      <div class="map-hint">
+        🗺️ <strong>Mapa interactivo:</strong> Desplazate libremente con el mouse o dedos, hacé clic o arrastrá el marcador a cualquier campo/zona. Cambiá a vista <strong>Satelital</strong> arriba a la derecha.
       </div>
 
       <!-- Coordinates Input (Manual & Dinámica) -->
@@ -1120,63 +1174,172 @@ footer {
     $climateBody.classList.toggle('open');
   });
 
-  // ──── Simple map canvas ────
+  // ──── Map Initialization (Leaflet + OpenStreetMap & Satellite + Canvas Fallback) ────
   initMap();
   // Cargar análisis inicial automáticamente al abrir la página
   analyze();
 
   function initMap() {
     const container = document.getElementById('mapContainer');
+    const leafletDiv = document.getElementById('leafletMap');
     const canvas = document.getElementById('mapCanvas');
     const placeholder = document.getElementById('mapPlaceholder');
-    const ctx = canvas.getContext('2d');
+    const disp = document.getElementById('coordDisplay');
 
-    // Draw a simple grid map representation
-    function drawMap() {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
+    function updateCoordDisplay(latVal, lonVal) {
+      if (disp) disp.textContent = `${Number(latVal).toFixed(2)}, ${Number(lonVal).toFixed(2)}`;
+    }
+
+    let currentLat = parseFloat($lat.value) || -31.42;
+    let currentLon = parseFloat($lon.value) || -64.18;
+    updateCoordDisplay(currentLat, currentLon);
+
+    let map = null;
+    let marker = null;
+
+    // Helper para contenido descriptivo del popup
+    function getPopupHtml(lat, lon) {
+      return `<strong>📍 Lote Seleccionado</strong><br>` +
+             `Lat: ${Number(lat).toFixed(4)}, Lon: ${Number(lon).toFixed(4)}<br>` +
+             `<small style="color:#666;">Arrastrá o hacé clic para mover</small>` +
+             `<button type="button" class="btn-popup-analyze" onclick="window.analyzeTrigger()">🔍 Analizar este lote</button>`;
+    }
+
+    // Inicializar Leaflet si el script está disponible
+    if (typeof L !== 'undefined') {
+      try {
+        if (placeholder) placeholder.classList.add('hidden');
+        if (canvas) canvas.classList.add('hidden');
+        if (leafletDiv) leafletDiv.classList.remove('hidden');
+
+        // Capa OpenStreetMap
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap'
+        });
+
+        // Capa Satelital de alta resolución (Esri World Imagery)
+        const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 18,
+          attribution: 'Tiles &copy; Esri'
+        });
+
+        map = L.map('leafletMap', {
+          center: [currentLat, currentLon],
+          zoom: 7,
+          layers: [osmLayer]
+        });
+
+        // Control de capas (Satelital / Callejero)
+        L.control.layers({
+          "🗺️ Callejero": osmLayer,
+          "🛰️ Satelital": satLayer
+        }, null, { position: 'topright' }).addTo(map);
+
+        // Marcador arrastrable en la posición elegida
+        marker = L.marker([currentLat, currentLon], {
+          draggable: true,
+          title: "Arrastrá para reubicar tu lote agrícola"
+        }).addTo(map);
+
+        marker.bindPopup(getPopupHtml(currentLat, currentLon));
+
+        // Evento al arrastrar y soltar el marcador
+        marker.on('dragend', function () {
+          const pos = marker.getLatLng();
+          $lat.value = pos.lat.toFixed(2);
+          $lon.value = pos.lng.toFixed(2);
+          document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+          updateCoordDisplay(pos.lat, pos.lng);
+          marker.setPopupContent(getPopupHtml(pos.lat, pos.lng)).openPopup();
+        });
+
+        // Evento al hacer clic en cualquier parte del mapa
+        map.on('click', function (e) {
+          const lat = e.latlng.lat;
+          const lon = e.latlng.lng;
+          $lat.value = lat.toFixed(2);
+          $lon.value = lon.toFixed(2);
+          marker.setLatLng([lat, lon]);
+          document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+          updateCoordDisplay(lat, lon);
+          marker.setPopupContent(getPopupHtml(lat, lon)).openPopup();
+        });
+
+        // Invalidate size para renderizado perfecto tras calcular estilos
+        setTimeout(() => { map.invalidateSize(); }, 350);
+      } catch (err) {
+        console.warn('Fallo al inicializar Leaflet, recurriendo a canvas:', err);
+        map = null;
+      }
+    }
+
+    // Exponer disparador de análisis para el botón del popup del marcador
+    window.analyzeTrigger = function() {
+      analyze();
+      if (marker) marker.closePopup();
+    };
+
+    // Sincronizar ubicación en el mapa
+    function syncMapLocation(lat, lon, pan = true) {
+      updateCoordDisplay(lat, lon);
+      if (map && marker) {
+        marker.setLatLng([lat, lon]);
+        marker.setPopupContent(getPopupHtml(lat, lon));
+        if (pan) {
+          map.panTo([lat, lon], { animate: true, duration: 0.6 });
+        }
+      } else {
+        drawCanvasMap();
+      }
+    }
+
+    // Fallback con Canvas tradicional si no hay conexión externa para Leaflet
+    function drawCanvasMap() {
+      if (map) return;
+      if (!canvas) return;
+      if (placeholder) placeholder.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      if (leafletDiv) leafletDiv.classList.add('hidden');
+
+      const ctx = canvas.getContext('2d');
+      canvas.width = container.clientWidth || 300;
+      canvas.height = container.clientHeight || 200;
       const w = canvas.width, h = canvas.height;
 
-      // Background
       ctx.fillStyle = '#e8f5e9';
       ctx.fillRect(0, 0, w, h);
 
-      // Grid lines
       ctx.strokeStyle = '#c8e6c9';
       ctx.lineWidth = 0.5;
       for (let i = 0; i < w; i += 20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
       for (let i = 0; i < h; i += 20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke(); }
 
-      // Argentina rough shape (simplified polygon)
       ctx.fillStyle = '#a5d6a7';
       ctx.beginPath();
-      // Map lat -22 to -55, lon -53 to -73 onto canvas
       const points = [
         [-53, -22], [-58, -22], [-66, -22], [-69, -27], [-68, -32],
         [-70, -35], [-71, -42], [-69, -52], [-65, -55], [-63, -52],
         [-58, -40], [-57, -34], [-58, -28], [-53, -22]
       ];
-      points.forEach(([lon, lat], i) => {
-        const x = ((lon - (-73)) / 20) * w;
-        const y = ((lat - (-22)) / (-33)) * h;
+      points.forEach(([pLon, pLat], i) => {
+        const x = ((pLon - (-73)) / 20) * w;
+        const y = ((pLat - (-22)) / (-33)) * h;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       });
       ctx.closePath();
       ctx.fill();
 
-      // Pin for current lat/lon
       const lat = parseFloat($lat.value) || -31.42;
       const lon = parseFloat($lon.value) || -64.18;
       const px = ((lon - (-73)) / 20) * w;
       const py = ((lat - (-22)) / (-33)) * h;
 
-      // Pin shadow
       ctx.beginPath();
       ctx.ellipse(px, py + 6, 5, 2, 0, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(0,0,0,.2)';
       ctx.fill();
 
-      // Pin circle
       ctx.beginPath();
       ctx.arc(px, py, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#d32f2f';
@@ -1185,51 +1348,42 @@ footer {
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Coord label
       ctx.fillStyle = '#333';
       ctx.font = '10px sans-serif';
       ctx.fillText(`${lat.toFixed(1)}, ${lon.toFixed(1)}`, px + 10, py + 4);
     }
 
-    placeholder.classList.add('hidden');
-    canvas.classList.remove('hidden');
-    drawMap();
-
-    // Click to update coords
-    canvas.addEventListener('click', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const lon = (x / canvas.width) * 20 + (-73);
-      const lat = (y / canvas.height) * (-33) + (-22);
-      $lat.value = lat.toFixed(2);
-      $lon.value = lon.toFixed(2);
-      document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
-      const disp = document.getElementById('coordDisplay');
-      if (disp) disp.textContent = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
-      drawMap();
-    });
-
-    function updateCoordDisplay() {
-      const latVal = parseFloat($lat.value) || 0;
-      const lonVal = parseFloat($lon.value) || 0;
-      const disp = document.getElementById('coordDisplay');
-      if (disp) disp.textContent = `${latVal.toFixed(2)}, ${lonVal.toFixed(2)}`;
+    if (!map) {
+      drawCanvasMap();
+      if (canvas) {
+        canvas.addEventListener('click', (e) => {
+          const rect = canvas.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const lon = (x / canvas.width) * 20 + (-73);
+          const lat = (y / canvas.height) * (-33) + (-22);
+          $lat.value = lat.toFixed(2);
+          $lon.value = lon.toFixed(2);
+          document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+          syncMapLocation(lat, lon, false);
+        });
+      }
     }
 
     // Input dinámico en vivo (al escribir o cambiar)
-    $lat.addEventListener('input', () => {
+    function onCoordInput() {
       document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
-      updateCoordDisplay();
-      drawMap();
-    });
-    $lon.addEventListener('input', () => {
-      document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
-      updateCoordDisplay();
-      drawMap();
-    });
-    $lat.addEventListener('change', () => { updateCoordDisplay(); drawMap(); });
-    $lon.addEventListener('change', () => { updateCoordDisplay(); drawMap(); });
+      const lat = parseFloat($lat.value);
+      const lon = parseFloat($lon.value);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        syncMapLocation(lat, lon, true);
+      }
+    }
+
+    $lat.addEventListener('input', onCoordInput);
+    $lon.addEventListener('input', onCoordInput);
+    $lat.addEventListener('change', onCoordInput);
+    $lon.addEventListener('change', onCoordInput);
 
     // Botón GPS / Geolocalización
     const $btnGps = document.getElementById('btnGps');
@@ -1238,11 +1392,13 @@ footer {
         $btnGps.textContent = '⏳ Obteniendo GPS...';
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            $lat.value = pos.coords.latitude.toFixed(2);
-            $lon.value = pos.coords.longitude.toFixed(2);
+            const lat = parseFloat(pos.coords.latitude.toFixed(2));
+            const lon = parseFloat(pos.coords.longitude.toFixed(2));
+            $lat.value = lat.toFixed(2);
+            $lon.value = lon.toFixed(2);
             document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
-            updateCoordDisplay();
-            drawMap();
+            syncMapLocation(lat, lon, true);
+            if (map) map.setView([lat, lon], 9);
             $btnGps.textContent = '✅ Ubicación detectada';
             setTimeout(() => { $btnGps.textContent = '📍 Detectar mi ubicación actual (GPS)'; }, 3000);
             analyze(); // Recalcular con la nueva coordenada
@@ -1260,15 +1416,20 @@ footer {
       chip.addEventListener('click', () => {
         document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
-        $lat.value = chip.dataset.lat;
-        $lon.value = chip.dataset.lon;
-        updateCoordDisplay();
-        drawMap();
+        const lat = parseFloat(chip.dataset.lat);
+        const lon = parseFloat(chip.dataset.lon);
+        $lat.value = lat.toFixed(2);
+        $lon.value = lon.toFixed(2);
+        syncMapLocation(lat, lon, true);
+        if (map) map.setView([lat, lon], 7);
         analyze(); // Analizar inmediatamente al tocar un preset
       });
     });
 
-    window.addEventListener('resize', drawMap);
+    window.addEventListener('resize', () => {
+      if (map) map.invalidateSize();
+      else drawCanvasMap();
+    });
   }
 
 
