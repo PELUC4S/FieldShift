@@ -88,50 +88,61 @@ def temperature_fitness(crop: dict, monthly_normals: dict[str, float],
     return sum(scores) / len(scores)
 
 
-def precipitation_fitness(crop: dict, monthly_normals_precip: dict[str, float],
-                          planting_month: int, cycle_months: int) -> float:
+def precipitation_fitness(
+    crop: dict,
+    monthly_normals_precip: dict[str, float],
+    planting_month: int,
+    cycle_months: int,
+    soil_water_reserve_mm: float = 0.0,
+) -> float:
     """
-    Evalúa si la precipitación acumulada durante el ciclo cumple con los
-    requerimientos hídricos del cultivo.
+    Evalúa si la oferta hídrica compuesta (precipitación acumulada + agua útil
+    almacenada en el perfil del suelo SoilGrids/SMAP) cumple con los
+    requerimientos del cultivo.
 
     Retorna 0-100:
-    - 100 si la precipitación es igual o mayor que la óptima
-    - Decae linealmente hacia 0 si es menor que el mínimo
-    - Pequeña penalización por exceso (>150% del óptimo)
+    - 100 si la oferta hídrica es igual o mayor que la óptima
+    - Decae linealmente hacia 0 si es menor que el mínimo efectivo
+    - Modulado por la eficiencia en uso del agua (water_consumption)
     """
     cycle_month_list = [((planting_month - 1 + i) % 12) + 1 for i in range(cycle_months)]
 
     # Acumular precipitación durante los meses del ciclo
-    total_precip = 0.0
+    total_rain = 0.0
     for m in cycle_month_list:
         p = monthly_normals_precip.get(str(m), monthly_normals_precip.get(m))
         if p is not None:
-            total_precip += p
+            total_rain += p
 
+    total_water = total_rain + soil_water_reserve_mm
     min_precip = crop["min_precip_cycle_mm"]
     opt_precip = crop["optimal_precip_cycle_mm"]
 
-    if total_precip >= opt_precip:
-        # Suficiente agua; penalización leve por exceso (anegamiento)
-        excess_ratio = total_precip / opt_precip if opt_precip > 0 else 1.0
+    # Ajuste por consumo hídrico genético (water_consumption)
+    water_cons = crop.get("water_consumption", "Medio").lower()
+    if water_cons in ["bajo", "muy bajo"]:
+        effective_min = min_precip * 0.88
+    elif water_cons in ["alto", "muy alto"]:
+        effective_min = min_precip * 1.05
+    else:
+        effective_min = min_precip
+
+    if total_water >= opt_precip:
+        excess_ratio = total_water / opt_precip if opt_precip > 0 else 1.0
         if excess_ratio > 1.5:
-            # Exceso marcado → penalizar
             penalty = min(30.0, (excess_ratio - 1.5) * 40.0)
             return max(50.0, 100.0 - penalty)
         return 100.0
-    elif total_precip <= min_precip * 0.5:
-        # Muy por debajo del mínimo
+    elif total_water <= effective_min * 0.4:
         return 0.0
-    elif total_precip <= min_precip:
-        # Entre 50% del mínimo y el mínimo → puntaje bajo
-        ratio = total_precip / min_precip if min_precip > 0 else 0
+    elif total_water <= effective_min:
+        ratio = total_water / effective_min if effective_min > 0 else 0
         return 40.0 * ratio
     else:
-        # Entre mínimo y óptimo → interpolación lineal 40-100
-        range_width = opt_precip - min_precip
+        range_width = opt_precip - effective_min
         if range_width <= 0:
             return 70.0
-        ratio = (total_precip - min_precip) / range_width
+        ratio = (total_water - effective_min) / range_width
         return 40.0 + 60.0 * ratio
 
 
@@ -235,10 +246,15 @@ def compute_crop_score(
     planting_month: int,
     cycle_months: int,
     weights: dict[str, float] | None = None,
+    soil_profile: dict[str, Any] | None = None,
+    satellite_indicators: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Calcula el puntaje probabilístico de aptitud agronómica de un cultivo
-    para una ubicación y período determinados.
+    para una ubicación y período determinados, integrando:
+    - Clima NASA POWER (Temperatura, Lluvia, Heladas, Calor, Variabilidad)
+    - Humedad satelital NASA SMAP (Superficie y Zona Radicular)
+    - Perfil edáfico SoilGrids ISRIC (Textura USDA, AWC 0-60cm, SOC y pH)
     """
     w = weights or DEFAULT_WEIGHTS.copy()
     monthly_temp = climate_data["climate_normal_monthly"]["temp_avg_c"]
@@ -247,7 +263,24 @@ def compute_crop_score(
     heat_by_month = climate_data["heat_stress_days"]["mean_by_month"]
     annual_rain = climate_data["annual_rainfall"]
 
-    # Verificar si el mes de siembra es válido para este cultivo
+    # Extraer perfil de suelo y satélite
+    soil = soil_profile or climate_data.get("soil_profile") or climate_data.get("satellite_indicators", {}).get("soil_profile")
+    sat = satellite_indicators or climate_data.get("satellite_indicators")
+
+    # 1. Agua disponible compuesta (Lluvia acumulada + reserva hídrica SMAP / SoilGrids)
+    awc_total_mm = 85.0
+    usda_text = "Franco"
+    if soil and "water_retention" in soil:
+        awc_total_mm = float(soil["water_retention"].get("total_awc_0_60cm_mm", 85.0))
+        usda_text = soil.get("texture", {}).get("usda_class", "Franco")
+
+    root_pct = 50.0
+    if sat and "smap_soil_moisture" in sat:
+        root_pct = float(sat["smap_soil_moisture"].get("rootzone_0_100cm", {}).get("percentage", 50.0))
+
+    soil_water_reserve_mm = round(awc_total_mm * (root_pct / 100.0), 1)
+
+    # 2. Verificar ventana biológica de siembra
     sowing_months = crop.get("sowing_months", [])
     is_valid_sowing = planting_month in sowing_months
     
@@ -265,9 +298,9 @@ def compute_crop_score(
         sowing_factor = 0.40
         sowing_penalty = 50.0
 
-    # Calcular componentes individuales de aptitud (0 a 100)
+    # 3. Calcular componentes individuales de aptitud (0 a 100)
     temp_fit = temperature_fitness(crop, monthly_temp, planting_month, cycle_months)
-    precip_fit = precipitation_fitness(crop, monthly_precip, planting_month, cycle_months)
+    precip_fit = precipitation_fitness(crop, monthly_precip, planting_month, cycle_months, soil_water_reserve_mm)
     frost_pen = frost_risk_penalty(crop, frost_by_month, planting_month, cycle_months)
     heat_pen = heat_risk_penalty(crop, heat_by_month, planting_month, cycle_months)
     rain_var = rainfall_variability_risk(annual_rain)
@@ -276,7 +309,72 @@ def compute_crop_score(
     heat_safety = max(0.0, 100.0 - heat_pen)
     rain_stability = max(0.0, 100.0 - rain_var)
 
-    # Suma ponderada de índices de seguridad y aptitud
+    # 4. Modificadores de fertilidad edáfica (SOC) y acidez (pH)
+    soc_g_kg = 17.5
+    om_pct = 3.0
+    if soil and "organic_carbon" in soil:
+        soc_g_kg = float(soil["organic_carbon"].get("soc_g_kg", 17.5))
+        om_pct = float(soil["organic_carbon"].get("organic_matter_pct", 3.0))
+
+    n_effect = crop.get("soil_nitrogen_effect", "neutral")
+    soc_mod = 0.0
+    soc_rationale = None
+
+    if soc_g_kg < 15.0:
+        factor = (1.0 - soc_g_kg / 15.0)
+        if n_effect == "fijador":
+            soc_mod = round(6.0 * factor, 1)
+            soc_rationale = f"🌱 Fertilidad baja (SOC: {soc_g_kg} g/kg): cultivo fijador bonificado (+{soc_mod}) para aportar nitrógeno orgánico."
+        elif n_effect == "consumidor_alto":
+            soc_mod = round(-6.0 * factor, 1)
+            soc_rationale = f"⚠️ Fertilidad baja (SOC: {soc_g_kg} g/kg): cultivo muy demandante de N; penalizado ({soc_mod}) por déficit nutricional."
+        elif n_effect == "consumidor_medio":
+            soc_mod = round(-2.5 * factor, 1)
+            soc_rationale = f"⚠️ Fertilidad moderada-baja (SOC: {soc_g_kg} g/kg): requerirá fertilización nitrogenada."
+    elif soc_g_kg >= 25.0:
+        factor = min(1.0, (soc_g_kg - 25.0) / 15.0)
+        if n_effect == "consumidor_alto":
+            soc_mod = round(4.0 * factor, 1)
+            soc_rationale = f"✓ Fertilidad alta (SOC: {soc_g_kg} g/kg, MO: {om_pct}%): aprovecha la excelente dotación biológica (+{soc_mod})."
+        elif n_effect == "consumidor_medio":
+            soc_mod = round(2.0 * factor, 1)
+            soc_rationale = f"✓ Fertilidad alta (SOC: {soc_g_kg} g/kg): condiciones óptimas de materia orgánica."
+        else:
+            soc_rationale = f"✓ Fertilidad alta (SOC: {soc_g_kg} g/kg): suelo estructurado con buena actividad biológica."
+    else:
+        soc_rationale = f"✓ Fertilidad media (SOC: {soc_g_kg} g/kg, MO: {om_pct}%): dotación equilibrada."
+
+    ph = 6.8
+    if soil and "acidity" in soil:
+        ph = float(soil["acidity"].get("ph_h2o", 6.8))
+
+    ph_mod = 0.0
+    ph_rationale = None
+    if ph < 5.5:
+        if n_effect == "fijador" or crop_key in ["cebada", "garbanzo"]:
+            ph_mod = -4.0
+            ph_rationale = f"⚠️ Acidez (pH {ph}): nodulación de fijadores e intercambio catiónico comprometidos (-4.0)."
+        else:
+            ph_mod = -2.0
+            ph_rationale = f"⚠️ Acidez (pH {ph}): suelo ácido con posible fijación de fósforo."
+    elif ph > 8.0:
+        if crop_key in ["sorgo", "cebada"]:
+            ph_mod = 0.0
+            ph_rationale = f"✓ Alcalinidad (pH {ph}): cultivo con buena tolerancia genética a pH elevado."
+        else:
+            ph_mod = -3.0
+            ph_rationale = f"⚠️ Alcalinidad (pH {ph}): riesgo de clorosis y menor asimilación de micronutrientes (-3.0)."
+    else:
+        ph_rationale = f"✓ Acidez (pH {ph}): rango óptimo para desarrollo radicular y absorción de nutrientes."
+
+    water_rationale = f"Suelo {usda_text} (AWC: {awc_total_mm} mm en 0-60cm): reserva útil en perfil {soil_water_reserve_mm} mm (SMAP {root_pct}%)."
+    soil_rationale = [water_rationale]
+    if soc_rationale:
+        soil_rationale.append(soc_rationale)
+    if ph_rationale:
+        soil_rationale.append(ph_rationale)
+
+    # 5. Suma ponderada de índices de seguridad y aptitud climática
     base_climate_fitness = (
         w["w_temp"] * temp_fit
         + w["w_precip"] * precip_fit
@@ -285,9 +383,10 @@ def compute_crop_score(
         + w["w_var"] * rain_stability
     )
 
-    # Multiplicar por factor de ventana de siembra biológica
-    final_score = base_climate_fitness * sowing_factor
-    final_score = max(0.0, min(100.0, final_score))
+    # Multiplicar por factor de ventana de siembra biológica y aplicar suelo
+    base_score = base_climate_fitness * sowing_factor
+    soil_modifier = round((soc_mod + ph_mod) * sowing_factor, 1)
+    final_score = max(0.0, min(100.0, base_score + soil_modifier))
 
     crop_name = crop_key.replace("_", " ").title()
 
@@ -313,15 +412,22 @@ def compute_crop_score(
         "breakdown": {
             "temperature_fitness": round(temp_fit, 1),
             "precipitation_fitness": round(precip_fit, 1),
+            "soil_water_reserve_mm": soil_water_reserve_mm,
+            "soil_score_modifier": soil_modifier,
+            "soc_g_kg": soc_g_kg,
+            "organic_matter_pct": om_pct,
+            "ph_h2o": ph,
             "frost_risk_penalty": round(frost_pen, 1),
             "heat_risk_penalty": round(heat_pen, 1),
             "rainfall_variability_risk": round(rain_var, 1),
             "sowing_month_valid": is_valid_sowing,
+            "sowing_factor": sowing_factor,
             "sowing_penalty": round(sowing_penalty, 1),
             "frost_safety": round(frost_safety, 1),
             "heat_safety": round(heat_safety, 1),
             "rain_stability": round(rain_stability, 1),
         },
+        "soil_rationale": soil_rationale,
         "weights_used": w,
         "planting_month": planting_month,
         "cycle_months": cycle_months,
@@ -335,13 +441,13 @@ def rank_crops(
     weights: dict[str, float] | None = None,
     crops_db: dict[str, dict] | None = None,
     previous_crops: list[str] | None = None,
+    soil_profile: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Rankea todos los cultivos disponibles para un mes de siembra y ubicación.
+    Integra datos climáticos NASA, satelitales SMAP y pedológicos SoilGrids.
     Si se especifican cultivos anteriores, pondera la compatibilidad agronómica
-    con el antecesor inmediato y penaliza repeticiones recientes.
-
-    Retorna lista ordenada de mayor a menor puntaje con desglose completo.
+    modulada por época de siembra y penaliza repeticiones recientes.
     """
     crops = crops_db or _load_crops()
     results = []
@@ -349,6 +455,10 @@ def rank_crops(
     valid_prev = [c.strip() for c in (previous_crops or []) if c and c.strip() in crops][:3]
     immediate_key = valid_prev[0] if valid_prev else None
     immediate_crop = crops.get(immediate_key) if immediate_key else None
+
+    # Obtener suelo y satélite
+    soil = soil_profile or climate_data.get("soil_profile") or climate_data.get("satellite_indicators", {}).get("soil_profile")
+    sat = climate_data.get("satellite_indicators")
 
     for key, crop in crops.items():
         score_data = compute_crop_score(
@@ -358,6 +468,8 @@ def rank_crops(
             planting_month=planting_month,
             cycle_months=cycle_months,
             weights=weights,
+            soil_profile=soil,
+            satellite_indicators=sat,
         )
         if immediate_key and immediate_crop:
             from .rotation import predecessor_compatibility
@@ -366,10 +478,14 @@ def rank_crops(
             if recency_penalty > 0:
                 reasons.append("✗ Cultivo en historial reciente del lote")
             net_bonus = rot_bonus - recency_penalty
+            # Modular bono sucesorio por ventana de siembra
+            sow_factor = score_data["breakdown"]["sowing_factor"]
+            effective_bonus = round(net_bonus * sow_factor, 1)
+
             raw_score = score_data["score"]
-            adjusted = max(0.0, min(100.0, raw_score + net_bonus))
+            adjusted = max(0.0, min(100.0, raw_score + effective_bonus))
             score_data["raw_climate_score"] = raw_score
-            score_data["rotation_bonus"] = round(net_bonus, 1)
+            score_data["rotation_bonus"] = effective_bonus
             score_data["score"] = round(adjusted, 1)
             score_data["probability_score"] = round(adjusted, 1)
             score_data["predecessor_note"] = " | ".join(reasons) if reasons else None

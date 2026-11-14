@@ -10,6 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+    from services.soilgrids_service import query_soilgrids
+except ImportError:
+    from backend.services.soilgrids_service import query_soilgrids
+
 logger = logging.getLogger("fieldshift.nasa_harvester")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -70,13 +75,14 @@ def _determine_soil_profile(lat: float, lon: float) -> dict[str, Any]:
 
 def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """
-    Calcula y modela las lecturas satelitales en tiempo real según las fuentes oficiales de NASA:
+    Calcula y modela las lecturas satelitales en tiempo real según las fuentes oficiales de NASA y SoilGrids:
     - NASA SMAP L3/L4: Humedad superficial (0-5 cm) y en zona radicular (0-100 cm).
     - NASA GPM IMERG & OpenET: Balance hídrico reciente (P - ETa) y SPI-3.
     - NASA HLS / MODIS / ECOSTRESS: NDVI y estrés evaporativo de canopia (ESI).
+    - SoilGrids (ISRIC): Textura USDA, retención hídrica AWC (0-30 y 30-60 cm), SOC y pH.
     """
     lat_r, lon_r = round(lat, 2), round(lon, 2)
-    soil_profile = _determine_soil_profile(lat_r, lon_r)
+    soil_profile = query_soilgrids(lat_r, lon_r)
 
     # Semilla determinista basada en ubicación para estabilidad geográfica
     loc_seed = int((abs(lat_r) * 1000 + abs(lon_r) * 100)) % 10000
@@ -275,6 +281,8 @@ def build_field_analytics(
         reasons = []
         if best_crop.get("predecessor_note"):
             reasons.extend(best_crop["predecessor_note"].split(" | "))
+        if best_crop.get("soil_rationale"):
+            reasons.extend(best_crop["soil_rationale"])
         reasons.extend(satellite_notes)
 
         recommended_next = {

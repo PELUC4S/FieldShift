@@ -48,6 +48,7 @@ FieldShift se apoya en los repositorios abiertos del programa **NASA Earth Scien
 | **NASA SMAP L4** | SMAP SPL4SMGP Global (9 km) | Humedad en zona radicular ($0\text{--}100\text{ cm}$) y anomalía $Z$-score | Disponibilidad de agua útil almacenada en el primer metro de suelo para sostener la evapotranspiración del cultivo. |
 | **NASA GPM IMERG** | GPM Core Observatory (0.1° / 10 km) | Precipitación diaria acumulada (`precipitationCal` en mm) | Medición de la oferta hídrica reciente (últimos 30 días) y cálculo del índice de sequía estacional `SPI-3`. |
 | **OpenET API** | Ensemble Landsat / Sentinel-2 (30 m) | Evapotranspiración Real ($ET_a$ en mm) | Cuantificación del consumo hídrico real del cultivo antecesor y balance hídrico neto ($P - ET_a$). |
+| **ISRIC SoilGrids v2.0** | Global Soil Information System (250 m) | Textura (`clay`, `silt`, `sand`), Retención hídrica (`wv0033`, `wv1500`), Materia Orgánica (`soc`) y Acidez (`phh2o`) | Cuantificación de Agua Disponible ($AWC_{0-30\text{cm}}$ y $AWC_{30-60\text{cm}}$), amortiguación de sequía invernal, fertilidad biológica de nitrógeno y aptitud edafológica del lote. |
 | **NASA HLS & ECOSTRESS** | Landsat 8/9, Sentinel-2 e ISS (30 m / 70 m) | Índice de Vegetación `NDVI` y Estrés Evaporativo de Canopia `ESI` | Estimación del vigor vegetativo foliar previo y volumen de rastrojo remanente en el lote. |
 | **OpenStreetMap & CartoDB** | OpenStreetMap Community / CARTO | Teselas raster cartográficas | Capa base interactiva para geolocalización ágil del lote. |
 | **Esri World Imagery** | Esri / Maxar / Earthstar Geographics | Ortofotos satelitales de alta resolución | Inspección visual satelital de parcelas y bordes del lote. |
@@ -63,6 +64,8 @@ La API corre por defecto en `http://localhost:8088`. La documentación interacti
 * **`GET /api/v1/field-analytics`**: Retorna el contrato integral de analítica del lote: metadatos geográficos, perfil de suelo, telemetría NASA (SMAP, GPM, OpenET, HLS), historial de antecesores, ranking y rotación sucesoria recomendada con justificación agronómica.  
   *Query params:* `lat`, `lon`, `planting_month` (1-12), `cycle_months` (2-8), `num_cycles` (1-10), `previous_crops` (ej. `soja,trigo,maiz`).
 * **`GET /api/v1/satellite-readings`**: Lecturas satelitales en tiempo real de humedad de suelo, balance hídrico, sequía `SPI-3` y vigor vegetal por celda espacial con caché local.  
+  *Query params:* `lat`, `lon`.
+* **`GET /api/v1/soil-profile`**: Perfil edafológico normalizado de ISRIC SoilGrids v2.0 (textura USDA, porcentajes de arcilla/limo/arena en $0\text{--}30\text{ cm}$, retención hídrica $AWC$ en $0\text{--}30\text{ cm}$ y $30\text{--}60\text{ cm}$, carbono orgánico $SOC$ y $\text{pH}$).  
   *Query params:* `lat`, `lon`.
 
 ### 2. Predicción de Cultivos y Rotación

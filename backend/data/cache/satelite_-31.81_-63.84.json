@@ -1,0 +1,43 @@
+{
+  "spatial_cell": "-31.81_-63.84",
+  "timestamp_utc": "2026-11-14T21:16:19.909681+00:00",
+  "soil_profile": {
+    "texture": "Franco-arenoso a Franco",
+    "available_water_capacity_mm": 125.0,
+    "organic_matter_pct": 2.2,
+    "drainage": "Rápido a moderado",
+    "rooting_depth_cm": 100
+  },
+  "smap_soil_moisture": {
+    "surface_0_5cm": {
+      "volumetric_m3_m3": 0.193,
+      "percentage": 42.9,
+      "status": "adecuado",
+      "description": "Humedad superficial moderada; viable para siembra inmediata.",
+      "sensor": "NASA SMAP L3 Enhanced (9km)"
+    },
+    "rootzone_0_100cm": {
+      "volumetric_m3_m3": 0.285,
+      "percentage": 59.4,
+      "status": "favorable",
+      "anomaly_zscore": 0.74,
+      "description": "Buena disponibilidad de agua útil en el primer metro de suelo.",
+      "sensor": "NASA SMAP L4 Global (SPL4SMGP 9km)"
+    }
+  },
+  "water_balance_gpm_openet": {
+    "period_days": 30,
+    "precipitation_gpm_mm": 52.4,
+    "evapotranspiration_openet_mm": 75.2,
+    "net_water_balance_mm": -22.8,
+    "spi_3_months": -0.64,
+    "drought_risk": "Moderado (Alerta de sequía incipiente)",
+    "precipitation_source": "NASA GPM IMERG (Final Run)",
+    "et_source": "OpenET Ensemble (Landsat/Sentinel-2 30m)"
+  },
+  "vegetation_and_canopy": {
+    "estimated_ndvi": 0.3,
+    "canopy_stress_esi": 0.59,
+    "source": "NASA HLS & ECOSTRESS (30m / 70m)"
+  }
+}

@@ -1,0 +1,271 @@
+{
+  "location": {
+    "latitude": -31.81,
+    "longitude": -63.84
+  },
+  "period": {
+    "start": "20050101",
+    "end": "20251231",
+    "years": 21
+  },
+  "source": "NASA POWER (daily, community AG)",
+  "thresholds": {
+    "frost_tmin_c": 0,
+    "heat_tmax_c": 35,
+    "note": "Umbrales agronómicos estándar para helada meteorológica y estrés térmico estival"
+  },
+  "climate_normal_monthly": {
+    "temp_avg_c": {
+      "1": 25.0,
+      "2": 23.5,
+      "3": 21.2,
+      "4": 17.4,
+      "5": 13.0,
+      "6": 9.9,
+      "7": 9.6,
+      "8": 11.6,
+      "9": 15.1,
+      "10": 18.7,
+      "11": 21.9,
+      "12": 24.3
+    },
+    "precip_mm": {
+      "1": 128.5,
+      "2": 121.7,
+      "3": 97.9,
+      "4": 58.2,
+      "5": 20.4,
+      "6": 14.4,
+      "7": 7.1,
+      "8": 11.0,
+      "9": 29.9,
+      "10": 73.2,
+      "11": 114.4,
+      "12": 98.6
+    }
+  },
+  "annual_rainfall": {
+    "mean_mm": 775.0,
+    "cv_percent": 19.6,
+    "min_mm": 486.0,
+    "max_mm": 1030.0,
+    "by_year_mm": {
+      "2005": 937.0,
+      "2006": 1030.0,
+      "2007": 700.0,
+      "2008": 753.0,
+      "2009": 601.0,
+      "2010": 679.0,
+      "2011": 719.0,
+      "2012": 796.0,
+      "2013": 796.0,
+      "2014": 954.0,
+      "2015": 997.0,
+      "2016": 954.0,
+      "2017": 784.0,
+      "2018": 652.0,
+      "2019": 918.0,
+      "2020": 525.0,
+      "2021": 749.0,
+      "2022": 486.0,
+      "2023": 637.0,
+      "2024": 848.0,
+      "2025": 762.0
+    },
+    "anomaly_by_year_mm": {
+      "2005": 162.0,
+      "2006": 255.0,
+      "2007": -75.0,
+      "2008": -22.0,
+      "2009": -174.0,
+      "2010": -96.0,
+      "2011": -56.0,
+      "2012": 21.0,
+      "2013": 21.0,
+      "2014": 179.0,
+      "2015": 222.0,
+      "2016": 179.0,
+      "2017": 9.0,
+      "2018": -123.0,
+      "2019": 143.0,
+      "2020": -250.0,
+      "2021": -26.0,
+      "2022": -289.0,
+      "2023": -139.0,
+      "2024": 73.0,
+      "2025": -13.0
+    }
+  },
+  "frost_days": {
+    "mean_per_year": 9.3,
+    "mean_by_month": {
+      "1": 0.0,
+      "2": 0.0,
+      "3": 0.0,
+      "4": 0.0,
+      "5": 0.6,
+      "6": 2.0,
+      "7": 4.1,
+      "8": 2.3,
+      "9": 0.3,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0
+    }
+  },
+  "heat_stress_days": {
+    "mean_per_year": 30.5,
+    "mean_by_month": {
+      "1": 9.6,
+      "2": 4.4,
+      "3": 2.1,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.1,
+      "9": 0.3,
+      "10": 1.6,
+      "11": 4.0,
+      "12": 8.4
+    }
+  },
+  "indicators_pending": {
+    "water_availability": null,
+    "soil_moisture": null
+  },
+  "monthly_normals": [
+    {
+      "month": 1,
+      "month_name": "Enero",
+      "temp_mean": 25.0,
+      "temperature": 25.0,
+      "precipitation": 128.5,
+      "rainfall": 128.5,
+      "frost_days": 0.0,
+      "heat_days": 9.6,
+      "heat_stress_days": 9.6
+    },
+    {
+      "month": 2,
+      "month_name": "Febrero",
+      "temp_mean": 23.5,
+      "temperature": 23.5,
+      "precipitation": 121.7,
+      "rainfall": 121.7,
+      "frost_days": 0.0,
+      "heat_days": 4.4,
+      "heat_stress_days": 4.4
+    },
+    {
+      "month": 3,
+      "month_name": "Marzo",
+      "temp_mean": 21.2,
+      "temperature": 21.2,
+      "precipitation": 97.9,
+      "rainfall": 97.9,
+      "frost_days": 0.0,
+      "heat_days": 2.1,
+      "heat_stress_days": 2.1
+    },
+    {
+      "month": 4,
+      "month_name": "Abril",
+      "temp_mean": 17.4,
+      "temperature": 17.4,
+      "precipitation": 58.2,
+      "rainfall": 58.2,
+      "frost_days": 0.0,
+      "heat_days": 0.0,
+      "heat_stress_days": 0.0
+    },
+    {
+      "month": 5,
+      "month_name": "Mayo",
+      "temp_mean": 13.0,
+      "temperature": 13.0,
+      "precipitation": 20.4,
+      "rainfall": 20.4,
+      "frost_days": 0.6,
+      "heat_days": 0.0,
+      "heat_stress_days": 0.0
+    },
+    {
+      "month": 6,
+      "month_name": "Junio",
+      "temp_mean": 9.9,
+      "temperature": 9.9,
+      "precipitation": 14.4,
+      "rainfall": 14.4,
+      "frost_days": 2.0,
+      "heat_days": 0.0,
+      "heat_stress_days": 0.0
+    },
+    {
+      "month": 7,
+      "month_name": "Julio",
+      "temp_mean": 9.6,
+      "temperature": 9.6,
+      "precipitation": 7.1,
+      "rainfall": 7.1,
+      "frost_days": 4.1,
+      "heat_days": 0.0,
+      "heat_stress_days": 0.0
+    },
+    {
+      "month": 8,
+      "month_name": "Agosto",
+      "temp_mean": 11.6,
+      "temperature": 11.6,
+      "precipitation": 11.0,
+      "rainfall": 11.0,
+      "frost_days": 2.3,
+      "heat_days": 0.1,
+      "heat_stress_days": 0.1
+    },
+    {
+      "month": 9,
+      "month_name": "Septiembre",
+      "temp_mean": 15.1,
+      "temperature": 15.1,
+      "precipitation": 29.9,
+      "rainfall": 29.9,
+      "frost_days": 0.3,
+      "heat_days": 0.3,
+      "heat_stress_days": 0.3
+    },
+    {
+      "month": 10,
+      "month_name": "Octubre",
+      "temp_mean": 18.7,
+      "temperature": 18.7,
+      "precipitation": 73.2,
+      "rainfall": 73.2,
+      "frost_days": 0.0,
+      "heat_days": 1.6,
+      "heat_stress_days": 1.6
+    },
+    {
+      "month": 11,
+      "month_name": "Noviembre",
+      "temp_mean": 21.9,
+      "temperature": 21.9,
+      "precipitation": 114.4,
+      "rainfall": 114.4,
+      "frost_days": 0.0,
+      "heat_days": 4.0,
+      "heat_stress_days": 4.0
+    },
+    {
+      "month": 12,
+      "month_name": "Diciembre",
+      "temp_mean": 24.3,
+      "temperature": 24.3,
+      "precipitation": 98.6,
+      "rainfall": 98.6,
+      "frost_days": 0.0,
+      "heat_days": 8.4,
+      "heat_stress_days": 8.4
+    }
+  ]
+}

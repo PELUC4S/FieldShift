@@ -430,6 +430,16 @@ main {
   margin-top: 4px;
   line-height: 1.3;
 }
+.crop-soil-note {
+  font-size: .71rem;
+  color: #1b5e20;
+  background: #f1f8e9;
+  border-left: 2px solid #4caf50;
+  padding: 3px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+  line-height: 1.3;
+}
 
 /* ═══════════════════════════════════════════
    SATELLITE TELEMETRY (NASA SMAP, GPM, OpenET, HLS)
@@ -1690,7 +1700,7 @@ footer {
     return scores.reduce((a, b) => a + b, 0) / scores.length;
   }
 
-  function precipFitness(crop, monthlyPrecip, plantingMonth, cycleMonths) {
+  function precipFitness(crop, monthlyPrecip, plantingMonth, cycleMonths, soilWaterReserveMm = 0) {
     let tot = 0;
     for (let i = 0; i < cycleMonths; i++) {
       const m = ((plantingMonth - 1 + i) % 12) + 1;
@@ -1698,14 +1708,23 @@ footer {
     }
     const minP = crop.min_precip_cycle_mm;
     const optP = crop.optimal_precip_cycle_mm;
-    if (tot >= optP) {
-      const ex = tot / optP;
+    const waterDemand = (crop.water_consumption || 'Medio').toLowerCase();
+
+    // Amortiguación por reserva hídrica profunda (SoilGrids AWC + SMAP Rootzone)
+    let reserveFactor = 0.50;
+    if (waterDemand === 'bajo') reserveFactor = 0.65;
+    else if (waterDemand === 'alto') reserveFactor = 0.35;
+
+    const effectiveWater = tot + (soilWaterReserveMm * reserveFactor);
+
+    if (effectiveWater >= optP) {
+      const ex = effectiveWater / optP;
       if (ex > 1.5) return Math.max(50, 100 - Math.min(30, (ex - 1.5) * 40));
       return 100;
     }
-    if (tot <= minP * 0.5) return 0;
-    if (tot <= minP) return 40 * (tot / minP);
-    return 40 + 60 * ((tot - minP) / (optP - minP));
+    if (effectiveWater <= minP * 0.4) return 0;
+    if (effectiveWater <= minP) return 40 * (effectiveWater / minP);
+    return 40 + 60 * ((effectiveWater - minP) / (optP - minP));
   }
 
   function frostPenalty(crop, frostByMonth, plantingMonth, cycleMonths) {
@@ -1741,7 +1760,7 @@ footer {
     return Math.min(100, cvScore + dScore);
   }
 
-  function computeLocalCropScore(key, crop, climate, plantingMonth, cycleMonths) {
+  function computeLocalCropScore(key, crop, climate, plantingMonth, cycleMonths, soilProfile = null) {
     const monthlyTemp = climate.climate_normal_monthly.temp_avg_c;
     const monthlyPrecip = climate.climate_normal_monthly.precip_mm;
     const frostByMonth = climate.frost_days.mean_by_month;
@@ -1756,8 +1775,24 @@ footer {
     const sowingFactor = isValid ? 1.0 : (isAdj ? 0.85 : 0.40);
     const sowingPenalty = isValid ? 0 : (isAdj ? 15 : 50);
 
+    // Integración de suelo y telemetría satelital
+    const soil = soilProfile || climate.soil_profile || (climate.satellite_indicators && climate.satellite_indicators.soil_profile);
+    const sat = climate.satellite_indicators;
+
+    let awcTotalMm = 85.0;
+    let usdaText = 'Franco';
+    if (soil && soil.water_retention) {
+      awcTotalMm = Number(soil.water_retention.total_awc_0_60cm_mm ?? soil.water_retention.awc_total_0_60cm_mm ?? 85.0);
+      usdaText = (soil.texture && soil.texture.usda_class) || soil.texture || 'Franco';
+    }
+    let rootPct = 50.0;
+    if (sat && sat.smap_soil_moisture && sat.smap_soil_moisture.rootzone_0_100cm) {
+      rootPct = Number(sat.smap_soil_moisture.rootzone_0_100cm.percentage ?? 50.0);
+    }
+    const soilWaterReserveMm = Math.round((awcTotalMm * (rootPct / 100.0)) * 10) / 10;
+
     const tFit = tempFitness(crop, monthlyTemp, plantingMonth, cycleMonths);
-    const pFit = precipFitness(crop, monthlyPrecip, plantingMonth, cycleMonths);
+    const pFit = precipFitness(crop, monthlyPrecip, plantingMonth, cycleMonths, soilWaterReserveMm);
     const fPen = frostPenalty(crop, frostByMonth, plantingMonth, cycleMonths);
     const hPen = heatPenalty(crop, heatByMonth, plantingMonth, cycleMonths);
     const rVar = rainVarRisk(annualRain);
@@ -1766,8 +1801,72 @@ footer {
     const hSafe = Math.max(0, 100 - hPen);
     const rSafe = Math.max(0, 100 - rVar);
 
-    const base = 0.30 * tFit + 0.30 * pFit + 0.15 * fSafe + 0.10 * hSafe + 0.15 * rSafe;
-    const finalScore = Math.max(0, Math.min(100, base * sowingFactor));
+    // Modificadores de fertilidad (SOC) y pH
+    let socVal = 17.5, omPct = 3.0;
+    if (soil && soil.organic_carbon) {
+      socVal = Number(soil.organic_carbon.soc_g_kg ?? 17.5);
+      omPct = Number(soil.organic_carbon.organic_matter_pct ?? 3.0);
+    } else if (soil && soil.chemical) {
+      socVal = Number(soil.chemical.soc_g_kg ?? 17.5);
+      omPct = Number(soil.chemical.organic_matter_pct ?? 3.0);
+    }
+    const nEffect = crop.soil_nitrogen_effect || 'neutral';
+    let socMod = 0.0, socRationale = null;
+    if (socVal < 15.0) {
+      const f = (1.0 - socVal / 15.0);
+      if (nEffect === 'fijador') {
+        socMod = Math.round(6.0 * f * 10) / 10;
+        socRationale = `🌱 Fertilidad baja (SOC: ${socVal} g/kg): cultivo fijador bonificado (+${socMod}) para aportar nitrógeno orgánico.`;
+      } else if (nEffect === 'consumidor_alto') {
+        socMod = Math.round(-6.0 * f * 10) / 10;
+        socRationale = `⚠️ Fertilidad baja (SOC: ${socVal} g/kg): cultivo demandante penalizado (${socMod}) por déficit de N.`;
+      } else if (nEffect === 'consumidor_medio') {
+        socMod = Math.round(-2.5 * f * 10) / 10;
+        socRationale = `⚠️ Fertilidad moderada-baja (SOC: ${socVal} g/kg): requerirá fertilización nitrogenada complementaria.`;
+      }
+    } else if (socVal >= 25.0) {
+      const f = Math.min(1.0, (socVal - 25.0) / 15.0);
+      if (nEffect === 'consumidor_alto') {
+        socMod = Math.round(4.0 * f * 10) / 10;
+        socRationale = `✓ Fertilidad alta (SOC: ${socVal} g/kg, MO: ${omPct}%): dotación biológica óptima para alto rendimiento (+${socMod}).`;
+      } else if (nEffect === 'consumidor_medio') {
+        socMod = Math.round(2.0 * f * 10) / 10;
+        socRationale = `✓ Fertilidad alta (SOC: ${socVal} g/kg): excelente dotación de materia orgánica.`;
+      }
+    }
+
+    let phVal = 6.8;
+    if (soil && soil.acidity) {
+      phVal = Number(soil.acidity.ph_h2o ?? 6.8);
+    } else if (soil && soil.chemical) {
+      phVal = Number(soil.chemical.ph_h2o ?? 6.8);
+    }
+    let phMod = 0.0, phRationale = null;
+    if (phVal < 5.5) {
+      if (nEffect === 'fijador' || key === 'cebada' || key === 'garbanzo') {
+        phMod = -4.0;
+        phRationale = `⚠️ Acidez (pH ${phVal}): nodulación de rizobios e intercambio catiónico comprometidos (-4.0).`;
+      } else {
+        phMod = -2.0;
+        phRationale = `⚠️ Acidez (pH ${phVal}): suelo ácido con posible fijación de fósforo.`;
+      }
+    } else if (phVal > 8.0) {
+      if (key === 'sorgo' || key === 'cebada') {
+        phRationale = `✓ Alcalinidad (pH ${phVal}): cultivo con buena tolerancia genética a pH elevado.`;
+      } else {
+        phMod = -3.0;
+        phRationale = `⚠️ Alcalinidad (pH ${phVal}): riesgo de menor asimilación de micronutrientes (-3.0).`;
+      }
+    }
+
+    const waterRationale = `Suelo ${usdaText} (AWC: ${awcTotalMm} mm en 0-60cm): reserva útil en perfil ${soilWaterReserveMm} mm (SMAP ${rootPct}%).`;
+    const soilRationale = [waterRationale];
+    if (socRationale) soilRationale.push(socRationale);
+    if (phRationale) soilRationale.push(phRationale);
+
+    const baseClimate = 0.30 * tFit + 0.30 * pFit + 0.15 * fSafe + 0.10 * hSafe + 0.15 * rSafe;
+    const soilModifier = Math.round((socMod + phMod) * sowingFactor * 10) / 10;
+    const finalScore = Math.max(0, Math.min(100, (baseClimate * sowingFactor) + soilModifier));
     const name = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     return {
@@ -1783,9 +1882,15 @@ footer {
       water_consumption: crop.water_consumption || 'Medio',
       cycle_days_mid: crop.cycle_days_mid || 120,
       notes: crop.notes || '',
+      soil_rationale: soilRationale,
       breakdown: {
         temperature_fitness: Math.round(tFit * 10) / 10,
         precipitation_fitness: Math.round(pFit * 10) / 10,
+        soil_water_reserve_mm: soilWaterReserveMm,
+        soil_score_modifier: soilModifier,
+        soc_g_kg: socVal,
+        organic_matter_pct: omPct,
+        ph_h2o: phVal,
         frost_risk_penalty: Math.round(fPen * 10) / 10,
         heat_risk_penalty: Math.round(hPen * 10) / 10,
         rainfall_variability_risk: Math.round(rVar * 10) / 10,
@@ -1795,7 +1900,7 @@ footer {
     };
   }
 
-  function clientRankCrops(climate, plantingMonth, cycleMonths, previousCrops = []) {
+  function clientRankCrops(climate, plantingMonth, cycleMonths, previousCrops = [], soilProfile = null) {
     const res = [];
     const validPrev = (previousCrops || []).filter(k => k && CROPS_DB[k]);
     const immediateKey = validPrev.length ? validPrev[0] : null;
@@ -1803,7 +1908,7 @@ footer {
 
     for (const key in CROPS_DB) {
       const crop = CROPS_DB[key];
-      const base = computeLocalCropScore(key, crop, climate, plantingMonth, cycleMonths);
+      const base = computeLocalCropScore(key, crop, climate, plantingMonth, cycleMonths, soilProfile);
       if (immediateKey && immediateCrop) {
         const compat = clientPredecessorCompatibility(key, crop, immediateKey, immediateCrop);
         let bonus = compat.bonus;
@@ -1812,9 +1917,13 @@ footer {
           bonus -= 7;
           reasons.push('✗ Cultivo presente en historial reciente');
         }
+        // Modular bono sucesorio por ventana biológica de siembra
+        const sowFactor = base.breakdown.sowing_month_valid ? 1.0 : (base.breakdown.sowing_penalty === 15 ? 0.85 : 0.40);
+        const effectiveBonus = Math.round(bonus * sowFactor * 10) / 10;
+
         base.raw_climate_score = base.score;
-        base.rotation_bonus = Math.round(bonus * 10) / 10;
-        base.score = Math.max(0, Math.min(100, Math.round((base.score + bonus) * 10) / 10));
+        base.rotation_bonus = effectiveBonus;
+        base.score = Math.max(0, Math.min(100, Math.round((base.score + effectiveBonus) * 10) / 10));
         base.probability_score = base.score;
         base.predecessor_note = reasons.join(' | ');
       }
@@ -2004,20 +2113,83 @@ footer {
   }
 
 
-  // ──── Modelado Satelital de Contingencia (NASA SMAP / GPM / OpenET / HLS) ────
+  // ──── Modelado Satelital y Edafológico de Contingencia (SoilGrids / NASA SMAP / GPM / OpenET / HLS) ────
   function getClientSatelliteReadings(lat, lon, climate) {
     const latR = Math.round(lat * 100) / 100;
     const lonR = Math.round(lon * 100) / 100;
-    let soil = { texture: 'Franco-limoso agrícola', available_water_capacity_mm: 130, organic_matter_pct: 2.6, drainage: 'Bueno' };
+
+    let usdaClass = 'Franco limoso', sandPct = 32, siltPct = 48, clayPct = 20;
+    let cc030 = 29.0, pmp030 = 13.5, cc3060 = 30.5, pmp3060 = 14.5;
+    let socVal = 17.5, phVal = 6.6, drainage = 'Bueno a moderado';
+
     if (lat <= -32.5 && lat >= -35.5 && lon <= -59 && lon >= -62.5) {
-      soil = { texture: 'Franco-limoso', available_water_capacity_mm: 155, organic_matter_pct: 3.2, drainage: 'Bueno a moderado' };
+      usdaClass = 'Franco limoso'; sandPct = 22; siltPct = 54; clayPct = 24;
+      cc030 = 31.0; pmp030 = 13.5; cc3060 = 33.0; pmp3060 = 14.5;
+      socVal = 22.5; phVal = 6.3; drainage = 'Bueno';
     } else if (lat <= -30 && lat >= -34 && lon <= -62.5 && lon >= -65.5) {
-      soil = { texture: 'Franco-arenoso a Franco', available_water_capacity_mm: 125, organic_matter_pct: 2.2, drainage: 'Rápido a moderado' };
+      usdaClass = 'Franco'; sandPct = 48.8; siltPct = 32.5; clayPct = 18.7;
+      cc030 = 26.5; pmp030 = 12.5; cc3060 = 28.0; pmp3060 = 13.5;
+      socVal = 14.8; phVal = 6.9; drainage = 'Rápido a moderado';
     } else if (lat <= -36.5 && lat >= -39 && lon <= -57 && lon >= -60) {
-      soil = { texture: 'Franco-arcilloso', available_water_capacity_mm: 140, organic_matter_pct: 4.1, drainage: 'Bueno' };
+      usdaClass = 'Franco arcilloso'; sandPct = 28; siltPct = 34; clayPct = 38;
+      cc030 = 33.0; pmp030 = 16.5; cc3060 = 35.0; pmp3060 = 18.0;
+      socVal = 26.0; phVal = 6.1; drainage = 'Moderado';
     } else if (lat <= -25.5 && lat >= -29 && lon <= -64 && lon >= -67) {
-      soil = { texture: 'Franco-arenoso aluvial', available_water_capacity_mm: 110, organic_matter_pct: 1.7, drainage: 'Rápido' };
+      usdaClass = 'Franco arenoso aluvial'; sandPct = 62; siltPct = 24; clayPct = 14;
+      cc030 = 22.0; pmp030 = 9.5; cc3060 = 23.5; pmp3060 = 10.5;
+      socVal = 11.0; phVal = 7.4; drainage = 'Rápido';
     }
+
+    const awc030Pct = Math.round((cc030 - pmp030) * 10) / 10;
+    const awc3060Pct = Math.round((cc3060 - pmp3060) * 10) / 10;
+    const awc030Mm = Math.round((awc030Pct / 100 * 300) * 10) / 10;
+    const awc3060Mm = Math.round((awc3060Pct / 100 * 300) * 10) / 10;
+    const awcTotalMm = Math.round((awc030Mm + awc3060Mm) * 10) / 10;
+    const omPct = Math.round((socVal / 10 * 1.724) * 100) / 100;
+    const phClass = phVal < 5.6 ? 'Ácido' : (phVal < 6.6 ? 'Ligeramente ácido' : (phVal <= 7.3 ? 'Neutro' : 'Alcalino'));
+
+    const soil = {
+      source: 'SoilGrids (ISRIC 250m) / Calibrado',
+      coordinates: { latitude: latR, longitude: lonR },
+      texture: {
+        usda_class: usdaClass,
+        clay_pct: clayPct,
+        silt_pct: siltPct,
+        sand_pct: sandPct,
+        depth_range: '0-30cm'
+      },
+      water_retention: {
+        topsoil_0_30cm: {
+          field_capacity_pct: cc030,
+          wilting_point_pct: pmp030,
+          awc_pct: awc030Pct,
+          awc_mm: awc030Mm,
+          role: 'Germinación y emergencia (cama de siembra)'
+        },
+        subsoil_30_60cm: {
+          field_capacity_pct: cc3060,
+          wilting_point_pct: pmp3060,
+          awc_pct: awc3060Pct,
+          awc_mm: awc3060Mm,
+          role: 'Reserva hídrica profunda (fase reproductiva)'
+        },
+        total_awc_0_60cm_mm: awcTotalMm
+      },
+      organic_carbon: {
+        soc_g_kg: socVal,
+        organic_matter_pct: omPct,
+        fertility_level: socVal < 15.0 ? 'Bajo' : (socVal >= 25.0 ? 'Alto' : 'Medio'),
+        depth_range: '0-30cm'
+      },
+      acidity: {
+        ph_h2o: phVal,
+        ph_class: phClass,
+        depth_range: '0-30cm'
+      },
+      available_water_capacity_mm: awcTotalMm,
+      organic_matter_pct: omPct,
+      drainage: drainage
+    };
 
     const locSeed = Math.abs(Math.round(latR * 1000 + lonR * 100)) % 10000;
     const annualRain = (climate && climate.annual_rainfall && climate.annual_rainfall.mean_mm) ? climate.annual_rainfall.mean_mm : 850;
@@ -2078,7 +2250,7 @@ footer {
     };
   }
 
-  // ──── Render Telemetría Satelital ────
+  // ──── Render Telemetría Satelital y Edafológica ────
   function renderSatelliteTelemetry(satData) {
     if (!$satSection || !$satGrid) return;
     if (!satData) {
@@ -2097,8 +2269,33 @@ footer {
     const rootCls = root.status_class || (root.percentage >= 45 ? 'optimal' : (root.percentage >= 25 ? 'warning' : 'alert'));
     const wbCls = wb.status_class || (wb.spi_3_months >= -0.5 ? 'optimal' : 'warning');
 
+    // Propiedades SoilGrids
+    const texObj = (typeof soil.texture === 'object' && soil.texture !== null) ? soil.texture : {};
+    const usdaClass = texObj.usda_class || (typeof soil.texture === 'string' ? soil.texture : 'Franco');
+    const clayPct = texObj.clay_pct ?? 20;
+    const siltPct = texObj.silt_pct ?? 45;
+    const sandPct = texObj.sand_pct ?? 35;
+
+    const wRet = soil.water_retention || {};
+    const topsoilWr = wRet.topsoil_0_30cm || {};
+    const subsoilWr = wRet.subsoil_30_60cm || {};
+    const awc030 = topsoilWr.awc_mm ?? wRet.awc_0_30cm_mm ?? 42.0;
+    const awc3060 = subsoilWr.awc_mm ?? wRet.awc_30_60cm_mm ?? 43.5;
+    const awcTotal = wRet.total_awc_0_60cm_mm ?? (soil.available_water_capacity_mm || Math.round((awc030 + awc3060) * 10) / 10);
+
+    const orgCarb = soil.organic_carbon || soil.chemical || {};
+    const socVal = orgCarb.soc_g_kg ?? 17.5;
+    const omVal = orgCarb.organic_matter_pct ?? (soil.organic_matter_pct || 3.0);
+    const fertLevel = orgCarb.fertility_level || (socVal < 15.0 ? 'Bajo' : (socVal >= 25.0 ? 'Alto' : 'Medio'));
+
+    const acid = soil.acidity || soil.chemical || {};
+    const phVal = acid.ph_h2o ?? 6.8;
+    const phClass = acid.ph_class || acid.ph_classification || (phVal < 6.0 ? 'Ácido' : (phVal > 7.3 ? 'Alcalino' : 'Neutro'));
+
+    const soilSrc = soil.source || 'ISRIC SoilGrids v2.0 (250m)';
+
     if ($satCellCoord) {
-      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${soil.texture || 'Franco'}</strong>`;
+      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})`;
     }
 
     $satGrid.innerHTML = `
@@ -2141,13 +2338,29 @@ footer {
 
       <div class="sat-card">
         <div class="sat-card-top">
-          <span>🌿 Vigor Vegetal & Capacidad</span>
-          <span class="sat-pill optimal">AWC: ${soil.available_water_capacity_mm || 130} mm</span>
+          <span>🏔️ Suelo & Edafología ISRIC</span>
+          <span class="sat-pill optimal">${usdaClass}</span>
         </div>
         <div class="sat-card-val">
-          NDVI ${veg.estimated_ndvi || 0.45} <small>ESI: ${veg.canopy_stress_esi || 0.7}</small>
+          AWC ${awcTotal} mm <small>(0-60 cm)</small>
         </div>
-        <div class="sat-card-sub">Materia orgánica estimada: <strong>${soil.organic_matter_pct || 2.5}%</strong> · Drenaje: ${soil.drainage || 'Bueno'}</div>
+        <div class="sat-card-sub">
+          Textura: <strong>Arcilla ${clayPct}% · Limo ${siltPct}% · Arena ${sandPct}%</strong><br>
+          Retención: 0-30cm: <strong>${awc030} mm</strong> | 30-60cm: <strong>${awc3060} mm</strong><br>
+          Fertilidad: SOC <strong>${socVal} g/kg</strong> (%MO: <strong>${omVal}%</strong> · ${fertLevel}) · pH: <strong>${phVal}</strong> (${phClass})
+        </div>
+        <div class="sat-source">🌍 ${soilSrc}</div>
+      </div>
+
+      <div class="sat-card">
+        <div class="sat-card-top">
+          <span>🌿 Vigor Vegetal & Estrés Canopia</span>
+          <span class="sat-pill optimal">NDVI ${veg.estimated_ndvi || 0.45}</span>
+        </div>
+        <div class="sat-card-val">
+          ESI ${veg.canopy_stress_esi || 0.70} <small>Evapotransp. Relativa</small>
+        </div>
+        <div class="sat-card-sub">Monitoreo multiespectral de canopia y estrés térmico hídrico.</div>
         <div class="sat-source">🛰️ NASA HLS (30 m) & ECOSTRESS (70 m)</div>
       </div>
     `;
@@ -2226,9 +2439,11 @@ footer {
     } catch (err) {
       console.info('Activando motor agroclimático integrado (Modo GitHub Pages / Standalone):', err.message);
       climate = getLocalClimate(lat, lon);
-      ranking = clientRankCrops(climate, month, cycle, previousCrops);
-      rotation = clientBuildRotation(climate, numCycles, month, firstCrop, previousCrops);
       satData = getClientSatelliteReadings(lat, lon, climate);
+      climate.soil_profile = satData.soil_profile;
+      climate.satellite_indicators = satData;
+      ranking = clientRankCrops(climate, month, cycle, previousCrops, satData.soil_profile);
+      rotation = clientBuildRotation(climate, numCycles, month, firstCrop, previousCrops);
     } finally {
       $btn.classList.remove('loading');
       $btn.disabled = false;
@@ -2355,6 +2570,7 @@ footer {
         </div>
 
         ${crop.predecessor_note ? `<div class="crop-pred-note">💡 ${crop.predecessor_note}</div>` : ''}
+        ${crop.soil_rationale && crop.soil_rationale.length ? `<div class="crop-soil-note">${crop.soil_rationale.join('<br>')}</div>` : ''}
 
         <div class="breakdown">
           ${barRow('🌡️', 'Temp', tempFit)}

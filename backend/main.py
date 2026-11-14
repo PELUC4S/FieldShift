@@ -17,11 +17,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from analysis.indicators import calcular_indicadores, ensure_monthly_normals
-from engine.crop_ranker import rank_crops, compute_crop_score, _load_crops
-from engine.rotation import build_rotation, suggest_next_crop
-from services.nasa_power import obtener_clima
-from services.nasa_harvester import get_satellite_readings, build_field_analytics
+try:
+    from analysis.indicators import calcular_indicadores, ensure_monthly_normals
+    from engine.crop_ranker import rank_crops, compute_crop_score, _load_crops
+    from engine.rotation import build_rotation, suggest_next_crop
+    from services.nasa_power import obtener_clima
+    from services.nasa_harvester import get_satellite_readings, build_field_analytics
+    from services.soilgrids_service import query_soilgrids
+except ImportError:
+    from backend.analysis.indicators import calcular_indicadores, ensure_monthly_normals
+    from backend.engine.crop_ranker import rank_crops, compute_crop_score, _load_crops
+    from backend.engine.rotation import build_rotation, suggest_next_crop
+    from backend.services.nasa_power import obtener_clima
+    from backend.services.nasa_harvester import get_satellite_readings, build_field_analytics
+    from backend.services.soilgrids_service import query_soilgrids
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +74,7 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
         try:
             cached_data = json.loads(archivo_cache.read_text(encoding="utf-8"))
             res = ensure_monthly_normals(cached_data)
+            res["soil_profile"] = query_soilgrids(lat_r, lon_r)
             res["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, res)
             return res
         except Exception as e:
@@ -77,6 +87,7 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
         archivo_cache.write_text(
             json.dumps(resultado, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        resultado["soil_profile"] = query_soilgrids(lat_r, lon_r)
         resultado["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, resultado)
         return resultado
     except Exception as e:
@@ -89,6 +100,7 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
             fb["location"] = {"latitude": lat, "longitude": lon}
             fb["fallback"] = True
             fb = ensure_monthly_normals(fb)
+            fb["soil_profile"] = query_soilgrids(lat_r, lon_r)
             fb["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, fb)
             return fb
         raise HTTPException(
@@ -169,17 +181,20 @@ def get_ranking(
     """
     climate_data = get_climate_data(lat, lon)
     prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()] if previous_crops else None
+    soil_prof = climate_data.get("soil_profile") or query_soilgrids(lat, lon)
     ranking = rank_crops(
         climate_data=climate_data,
         planting_month=planting_month,
         cycle_months=cycle_months,
         previous_crops=prev_list,
+        soil_profile=soil_prof,
     )
     return {
         "location": {"latitude": lat, "longitude": lon},
         "planting_month": planting_month,
         "cycle_months": cycle_months,
         "previous_crops": prev_list,
+        "soil_profile": soil_prof,
         "total_evaluated": len(ranking),
         "best_crop": ranking[0] if ranking else None,
         "crops": ranking,
@@ -259,6 +274,19 @@ def get_satellite_endpoint(
     """
     climate_data = get_climate_data(lat, lon)
     return get_satellite_readings(lat, lon, climate_data)
+
+
+@app.get("/api/v1/soil-profile", tags=["Edafológico"])
+def get_soil_profile_endpoint(
+    lat: float = Query(..., ge=-90, le=90, description="Latitud del lote"),
+    lon: float = Query(..., ge=-180, le=180, description="Longitud del lote"),
+):
+    """
+    Retorna el perfil edafológico oficial de SoilGrids v2.0 (ISRIC):
+    textura USDA (0-30cm), retención hídrica AWC (0-30 y 30-60cm),
+    carbono orgánico del suelo (SOC) y pH en agua.
+    """
+    return query_soilgrids(lat, lon)
 
 
 @app.get("/api/v1/field-analytics", tags=["Analítica"])
