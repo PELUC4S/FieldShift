@@ -1,43 +1,81 @@
 {
   "spatial_cell": "-31.42_-64.18",
-  "timestamp_utc": "2026-11-14T21:06:48.650428+00:00",
+  "timestamp_utc": "2026-11-14T22:55:44.703887+00:00",
   "soil_profile": {
-    "texture": "Franco-arenoso a Franco",
-    "available_water_capacity_mm": 125.0,
-    "organic_matter_pct": 2.2,
-    "drainage": "Rápido a moderado",
-    "rooting_depth_cm": 100
+    "source": "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado",
+    "is_fallback": true,
+    "coordinates": {
+      "latitude": -31.42,
+      "longitude": -64.18
+    },
+    "texture": {
+      "usda_class": "Franco",
+      "clay_pct": 18.7,
+      "silt_pct": 32.5,
+      "sand_pct": 48.8,
+      "depth_range": "0-30cm"
+    },
+    "water_retention": {
+      "topsoil_0_30cm": {
+        "field_capacity_pct": 26.5,
+        "wilting_point_pct": 12.5,
+        "awc_pct": 14.0,
+        "awc_mm": 42.0,
+        "role": "Germinación y emergencia (cama de siembra)"
+      },
+      "subsoil_30_60cm": {
+        "field_capacity_pct": 28.0,
+        "wilting_point_pct": 13.5,
+        "awc_pct": 14.5,
+        "awc_mm": 43.5,
+        "role": "Reserva hídrica profunda (fase reproductiva)"
+      },
+      "total_awc_0_60cm_mm": 85.5
+    },
+    "organic_carbon": {
+      "soc_g_kg": 14.8,
+      "organic_matter_pct": 2.55,
+      "fertility_level": "Bajo",
+      "depth_range": "0-30cm"
+    },
+    "acidity": {
+      "ph_h2o": 6.9,
+      "ph_class": "Neutro",
+      "depth_range": "0-30cm"
+    },
+    "available_water_capacity_mm": 85.5,
+    "organic_matter_pct": 2.55
   },
   "smap_soil_moisture": {
     "surface_0_5cm": {
-      "volumetric_m3_m3": 0.222,
-      "percentage": 49.3,
+      "volumetric_m3_m3": 0.204,
+      "percentage": 45.3,
       "status": "adecuado",
       "description": "Humedad superficial moderada; viable para siembra inmediata.",
       "sensor": "NASA SMAP L3 Enhanced (9km)"
     },
     "rootzone_0_100cm": {
-      "volumetric_m3_m3": 0.295,
-      "percentage": 61.5,
+      "volumetric_m3_m3": 0.27,
+      "percentage": 56.2,
       "status": "favorable",
-      "anomaly_zscore": 0.37,
+      "anomaly_zscore": 0.38,
       "description": "Buena disponibilidad de agua útil en el primer metro de suelo.",
       "sensor": "NASA SMAP L4 Global (SPL4SMGP 9km)"
     }
   },
   "water_balance_gpm_openet": {
     "period_days": 30,
-    "precipitation_gpm_mm": 62.9,
+    "precipitation_gpm_mm": 57.4,
     "evapotranspiration_openet_mm": 71.2,
-    "net_water_balance_mm": -8.3,
-    "spi_3_months": -0.25,
+    "net_water_balance_mm": -13.8,
+    "spi_3_months": -0.4,
     "drought_risk": "Bajo (Condición Normal)",
     "precipitation_source": "NASA GPM IMERG (Final Run)",
     "et_source": "OpenET Ensemble (Landsat/Sentinel-2 30m)"
   },
   "vegetation_and_canopy": {
-    "estimated_ndvi": 0.49,
-    "canopy_stress_esi": 0.66,
+    "estimated_ndvi": 0.46,
+    "canopy_stress_esi": 0.63,
     "source": "NASA HLS & ECOSTRESS (30m / 70m)"
   }
 }

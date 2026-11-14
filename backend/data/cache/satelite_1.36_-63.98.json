@@ -1,0 +1,82 @@
+{
+  "spatial_cell": "1.36_-63.98",
+  "timestamp_utc": "2026-11-14T23:29:03.160814+00:00",
+  "soil_profile": {
+    "source": "ISRIC SoilGrids / Bioma Ferralsol/Oxisol Tropical",
+    "is_fallback": true,
+    "coordinates": {
+      "latitude": 1.36,
+      "longitude": -63.98
+    },
+    "texture": {
+      "usda_class": "Arcilloso",
+      "clay_pct": 44.0,
+      "silt_pct": 26.0,
+      "sand_pct": 30.0,
+      "depth_range": "0-30cm"
+    },
+    "water_retention": {
+      "topsoil_0_30cm": {
+        "field_capacity_pct": 32.0,
+        "wilting_point_pct": 21.0,
+        "awc_pct": 11.0,
+        "awc_mm": 33.0,
+        "role": "Germinación y emergencia (cama de siembra)"
+      },
+      "subsoil_30_60cm": {
+        "field_capacity_pct": 33.0,
+        "wilting_point_pct": 22.0,
+        "awc_pct": 11.0,
+        "awc_mm": 33.0,
+        "role": "Reserva hídrica profunda (fase reproductiva)"
+      },
+      "total_awc_0_60cm_mm": 66.0
+    },
+    "organic_carbon": {
+      "soc_g_kg": 14.5,
+      "organic_matter_pct": 2.5,
+      "fertility_level": "Medio a Bajo (Fijación de P)",
+      "depth_range": "0-30cm"
+    },
+    "acidity": {
+      "ph_h2o": 4.9,
+      "ph_class": "Ácido",
+      "depth_range": "0-30cm"
+    },
+    "available_water_capacity_mm": 66.0,
+    "organic_matter_pct": 2.5,
+    "drainage": "Bueno"
+  },
+  "smap_soil_moisture": {
+    "surface_0_5cm": {
+      "volumetric_m3_m3": 0.383,
+      "percentage": 85.1,
+      "status": "exceso_hidrico",
+      "description": "Saturación por exceso de precipitaciones recientes; riesgo de compactación.",
+      "sensor": "NASA SMAP L3 Enhanced (9km)"
+    },
+    "rootzone_0_100cm": {
+      "volumetric_m3_m3": 0.407,
+      "percentage": 84.8,
+      "status": "abundante",
+      "anomaly_zscore": 0.37,
+      "description": "Excelente recarga en todo el perfil radicular; alta resiliencia estival.",
+      "sensor": "NASA SMAP L4 Global (SPL4SMGP 9km)"
+    }
+  },
+  "water_balance_gpm_openet": {
+    "period_days": 30,
+    "precipitation_gpm_mm": 120.4,
+    "evapotranspiration_openet_mm": 97.9,
+    "net_water_balance_mm": 22.5,
+    "spi_3_months": 0.63,
+    "drought_risk": "Bajo (Condición Normal)",
+    "precipitation_source": "NASA GPM IMERG (Final Run)",
+    "et_source": "OpenET Ensemble (Landsat/Sentinel-2 30m)"
+  },
+  "vegetation_and_canopy": {
+    "estimated_ndvi": 0.82,
+    "canopy_stress_esi": 0.81,
+    "source": "NASA HLS & ECOSTRESS (30m / 70m)"
+  }
+}

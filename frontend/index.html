@@ -1613,16 +1613,10 @@ footer {
     }
     const base = JSON.parse(JSON.stringify(closest || Object.values(CLIMATES_DB)[0]));
 
-    // 2. Modelo de gradiente agroclimático dinámico:
-    // Hacia el norte (latitud menos negativa) la temperatura sube ~0.65 °C por grado
-    const refLat = base.location.latitude;
-    const latDiff = lat - refLat;
-    const tempShift = latDiff * 0.65;
-
-    // Gradiente longitudinal: hacia el este más lluvia, hacia el oeste (precordillera) menos
-    const refLon = base.location.longitude;
-    const lonDiff = lon - refLon;
-    const precipFactor = Math.max(0.4, Math.min(1.6, 1.0 + (lonDiff * 0.04)));
+    // 2. Modelo agroclimático según bioma y hemisferio:
+    const isArctic = Math.abs(lat) >= 55.0;
+    const isSahara = (lat >= 15.0 && lat <= 32.0 && lon >= -18.0 && lon <= 55.0);
+    const isNorthern = lat >= 0;
 
     const newTempAvg = {};
     const newPrecipMm = {};
@@ -1631,38 +1625,84 @@ footer {
     const monthlyNormals = [];
     const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-    for (let m = 1; m <= 12; m++) {
-      const bT = base.climate_normal_monthly.temp_avg_c[m] ?? base.climate_normal_monthly.temp_avg_c[String(m)] ?? 20;
-      const bP = base.climate_normal_monthly.precip_mm[m] ?? base.climate_normal_monthly.precip_mm[String(m)] ?? 50;
+    if (isArctic) {
+      // Clima Boreal / Tundra Subártica (ej. Siberia, Norte de Canadá, Escandinavia)
+      const arcticTemps = isNorthern
+        ? [-28.4, -26.0, -18.2, -8.5, 1.2, 12.0, 16.5, 13.0, 5.5, -7.8, -20.0, -25.5]
+        : [1.2, 12.0, 16.5, 13.0, 5.5, -7.8, -20.0, -25.5, -28.4, -26.0, -18.2, -8.5];
+      const arcticPrecip = [25, 20, 22, 24, 35, 55, 68, 72, 50, 38, 30, 28];
+      const arcticFrost = isNorthern
+        ? [31, 28, 31, 28, 14, 0, 0, 0, 12, 28, 30, 31]
+        : [0, 0, 12, 28, 30, 31, 31, 28, 31, 28, 14, 0];
 
-      const adjT = Math.round((bT + tempShift) * 10) / 10;
-      const adjP = Math.round(bP * precipFactor * 10) / 10;
-      newTempAvg[m] = adjT;
-      newPrecipMm[m] = adjP;
+      for (let m = 1; m <= 12; m++) {
+        const t = arcticTemps[m - 1];
+        const p = arcticPrecip[m - 1];
+        const f = arcticFrost[m - 1];
+        newTempAvg[m] = t;
+        newPrecipMm[m] = p;
+        newFrostByMonth[m] = f;
+        newHeatByMonth[m] = 0.0;
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: t, temperature: t, precipitation: p, rainfall: p,
+          frost_days: f, heat_days: 0.0, heat_stress_days: 0.0
+        });
+      }
+    } else if (isSahara) {
+      // Clima Hiperárido Desértico
+      const saharaTemps = [18.0, 21.0, 26.0, 31.0, 35.5, 39.0, 41.2, 40.5, 36.5, 30.0, 23.5, 18.5];
+      const saharaPrecip = [4, 3, 2, 1, 1, 0, 0, 2, 4, 8, 6, 4];
+      const saharaHeat = [0, 0, 2, 8, 18, 26, 30, 29, 20, 6, 0, 0];
 
-      // Heladas invernales (meses 5 a 9) aumentan a mayor latitud sur
-      const isWinter = (m >= 5 && m <= 9);
-      let frostBase = Math.max(0, (-lat - 26) * 0.3);
-      const adjFrost = isWinter ? Math.round(frostBase * (m === 7 ? 2.5 : 1.2) * 10) / 10 : 0.0;
-      newFrostByMonth[m] = adjFrost;
+      for (let m = 1; m <= 12; m++) {
+        const t = saharaTemps[m - 1];
+        const p = saharaPrecip[m - 1];
+        const h = saharaHeat[m - 1];
+        newTempAvg[m] = t;
+        newPrecipMm[m] = p;
+        newFrostByMonth[m] = 0.0;
+        newHeatByMonth[m] = h;
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: t, temperature: t, precipitation: p, rainfall: p,
+          frost_days: 0.0, heat_days: h, heat_stress_days: h
+        });
+      }
+    } else {
+      // Gradiente agroclimático templado / de referencia
+      const refLat = base.location.latitude;
+      const latDiff = Math.max(-15, Math.min(15, lat - refLat));
+      const tempShift = latDiff * 0.65;
+      const refLon = base.location.longitude;
+      const lonDiff = Math.max(-15, Math.min(15, lon - refLon));
+      const precipFactor = Math.max(0.4, Math.min(1.6, 1.0 + (lonDiff * 0.04)));
 
-      // Estrés térmico estival (>35°C) aumenta hacia el norte
-      const isSummer = (m <= 3 || m >= 10);
-      let heatBase = Math.max(0, (lat - (-36)) * 0.35);
-      const adjHeat = isSummer ? Math.round(heatBase * 1.8 * 10) / 10 : 0.0;
-      newHeatByMonth[m] = adjHeat;
+      for (let m = 1; m <= 12; m++) {
+        const bT = base.climate_normal_monthly.temp_avg_c[m] ?? base.climate_normal_monthly.temp_avg_c[String(m)] ?? 20;
+        const bP = base.climate_normal_monthly.precip_mm[m] ?? base.climate_normal_monthly.precip_mm[String(m)] ?? 50;
 
-      monthlyNormals.push({
-        month: m,
-        month_name: monthNames[m - 1],
-        temp_mean: adjT,
-        temperature: adjT,
-        precipitation: adjP,
-        rainfall: adjP,
-        frost_days: adjFrost,
-        heat_days: adjHeat,
-        heat_stress_days: adjHeat
-      });
+        const adjT = Math.round((bT + tempShift) * 10) / 10;
+        const adjP = Math.round(bP * precipFactor * 10) / 10;
+        newTempAvg[m] = adjT;
+        newPrecipMm[m] = adjP;
+
+        const isWinter = (m >= 5 && m <= 9);
+        let frostBase = Math.max(0, (-lat - 26) * 0.3);
+        const adjFrost = isWinter ? Math.round(frostBase * (m === 7 ? 2.5 : 1.2) * 10) / 10 : 0.0;
+        newFrostByMonth[m] = adjFrost;
+
+        const isSummer = (m <= 3 || m >= 10);
+        let heatBase = Math.max(0, (lat - (-36)) * 0.35);
+        const adjHeat = isSummer ? Math.round(heatBase * 1.8 * 10) / 10 : 0.0;
+        newHeatByMonth[m] = adjHeat;
+
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: adjT, temperature: adjT, precipitation: adjP, rainfall: adjP,
+          frost_days: adjFrost, heat_days: adjHeat, heat_stress_days: adjHeat
+        });
+      }
     }
 
     base.location = { latitude: lat, longitude: lon, is_dynamic: true };
@@ -1767,12 +1807,19 @@ footer {
     const heatByMonth = climate.heat_stress_days.mean_by_month;
     const annualRain = climate.annual_rainfall;
 
-    const sowingMonths = crop.sowing_months || [];
+    const lat = (climate.location && (climate.location.latitude ?? climate.location.lat)) ?? 0;
+    const baseSowing = crop.sowing_months || [];
+    const baseHarvest = crop.harvest_months || [];
+
+    // Desfasaje hemisférico: en hemisferio norte (lat >= 0), desplazar 6 meses respecto a siembras de hemisferio sur
+    const sowingMonths = lat >= 0 ? baseSowing.map(m => ((m - 1 + 6) % 12) + 1) : [...baseSowing];
+    const harvestMonths = lat >= 0 ? baseHarvest.map(m => ((m - 1 + 6) % 12) + 1) : [...baseHarvest];
+
     const isValid = sowingMonths.includes(plantingMonth);
     const adjMonths = sowingMonths.flatMap(m => [((m - 2 + 12) % 12) + 1, (m % 12) + 1]);
     const isAdj = !isValid && adjMonths.includes(plantingMonth);
 
-    const sowingFactor = isValid ? 1.0 : (isAdj ? 0.85 : 0.40);
+    const sowingFactor = isValid ? 1.0 : (isAdj ? 0.85 : 0.35);
     const sowingPenalty = isValid ? 0 : (isAdj ? 15 : 50);
 
     // Integración de suelo y telemetría satelital
@@ -1783,7 +1830,10 @@ footer {
     let usdaText = 'Franco';
     if (soil && soil.water_retention) {
       awcTotalMm = Number(soil.water_retention.total_awc_0_60cm_mm ?? soil.water_retention.awc_total_0_60cm_mm ?? 85.0);
-      usdaText = (soil.texture && soil.texture.usda_class) || soil.texture || 'Franco';
+      usdaText = (soil.texture && soil.texture.usda_class) || (typeof soil.texture === 'string' ? soil.texture : 'Franco');
+    } else if (soil && soil.available_water_capacity_mm) {
+      awcTotalMm = Number(soil.available_water_capacity_mm);
+      usdaText = (soil.texture && soil.texture.usda_class) || (typeof soil.texture === 'string' ? soil.texture : 'Franco');
     }
     let rootPct = 50.0;
     if (sat && sat.smap_soil_moisture && sat.smap_soil_moisture.rootzone_0_100cm) {
@@ -1860,13 +1910,41 @@ footer {
     }
 
     const waterRationale = `Suelo ${usdaText} (AWC: ${awcTotalMm} mm en 0-60cm): reserva útil en perfil ${soilWaterReserveMm} mm (SMAP ${rootPct}%).`;
-    const soilRationale = [waterRationale];
-    if (socRationale) soilRationale.push(socRationale);
-    if (phRationale) soilRationale.push(phRationale);
 
-    const baseClimate = 0.30 * tFit + 0.30 * pFit + 0.15 * fSafe + 0.10 * hSafe + 0.15 * rSafe;
-    const soilModifier = Math.round((socMod + phMod) * sowingFactor * 10) / 10;
-    const finalScore = Math.max(0, Math.min(100, (baseClimate * sowingFactor) + soilModifier));
+    // 5. Evaluación de Umbrales Críticos / Ley del Mínimo de Liebig
+    const plantTemp = monthlyTemp[plantingMonth] ?? monthlyTemp[String(plantingMonth)] ?? 20;
+    const frostTol = crop.frost_tolerance || 'media';
+    const isFrozenSoil = (plantTemp < 0.0) || usdaText.toLowerCase().includes('permafrost');
+    const isLethalClimate = (tFit <= 0.0) || (fPen >= 85.0 && (frostTol === 'nula' || frostTol === 'baja'));
+
+    let finalScore = 0.0;
+    let baseClimate = 0.0;
+    let soilModifier = 0.0;
+    let effSowingFactor = sowingFactor;
+    let soilRationale = [];
+
+    if (isFrozenSoil || isLethalClimate) {
+      finalScore = 0.0;
+      baseClimate = 0.0;
+      effSowingFactor = 0.0;
+      soilModifier = 0.0;
+      const fatalMsg = isFrozenSoil
+        ? `❄️ Inviable por Suelo Congelado / Criosfera (T mes ${plantingMonth}: ${plantTemp}°C). Germinación e implantación biológicamente imposibles (Ley del Mínimo de Liebig).`
+        : `❄️ Inviable por Régimen Térmico Letal (Aptitud térmica: 0% / Heladas: ${Math.round(fPen)}%). Cultivo biológicamente inviable en esta latitud y mes (Ley de Liebig).`;
+      soilRationale = [fatalMsg, waterRationale];
+      if (socRationale) soilRationale.push(socRationale);
+      if (phRationale) soilRationale.push(phRationale);
+    } else {
+      soilRationale = [waterRationale];
+      if (socRationale) soilRationale.push(socRationale);
+      if (phRationale) soilRationale.push(phRationale);
+
+      const thermalGate = Math.pow(tFit / 100, 0.6);
+      baseClimate = (0.30 * tFit + 0.30 * pFit + 0.15 * fSafe + 0.10 * hSafe + 0.15 * rSafe) * thermalGate;
+      soilModifier = Math.round((socMod + phMod) * sowingFactor * 10) / 10;
+      finalScore = Math.max(0, Math.min(100, (baseClimate * sowingFactor) + soilModifier));
+    }
+
     const name = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     return {
@@ -1883,6 +1961,8 @@ footer {
       cycle_days_mid: crop.cycle_days_mid || 120,
       notes: crop.notes || '',
       soil_rationale: soilRationale,
+      sowing_months: sowingMonths,
+      harvest_months: harvestMonths,
       breakdown: {
         temperature_fitness: Math.round(tFit * 10) / 10,
         precipitation_fitness: Math.round(pFit * 10) / 10,
@@ -1895,6 +1975,7 @@ footer {
         heat_risk_penalty: Math.round(hPen * 10) / 10,
         rainfall_variability_risk: Math.round(rVar * 10) / 10,
         sowing_month_valid: isValid,
+        sowing_factor: effSowingFactor,
         sowing_penalty: sowingPenalty,
       }
     };
@@ -1917,13 +1998,13 @@ footer {
           bonus -= 7;
           reasons.push('✗ Cultivo presente en historial reciente');
         }
-        // Modular bono sucesorio por ventana biológica de siembra
-        const sowFactor = base.breakdown.sowing_month_valid ? 1.0 : (base.breakdown.sowing_penalty === 15 ? 0.85 : 0.40);
-        const effectiveBonus = Math.round(bonus * sowFactor * 10) / 10;
+        // Modular bono sucesorio por ventana biológica de siembra y anular si es inviable
+        const sowFactor = base.breakdown.sowing_factor ?? (base.breakdown.sowing_month_valid ? 1.0 : (base.breakdown.sowing_penalty === 15 ? 0.85 : 0.40));
+        const effectiveBonus = base.score <= 0.0 ? 0.0 : Math.round(bonus * sowFactor * 10) / 10;
 
         base.raw_climate_score = base.score;
         base.rotation_bonus = effectiveBonus;
-        base.score = Math.max(0, Math.min(100, Math.round((base.score + effectiveBonus) * 10) / 10));
+        base.score = base.score <= 0.0 ? 0.0 : Math.max(0, Math.min(100, Math.round((base.score + effectiveBonus) * 10) / 10));
         base.probability_score = base.score;
         base.predecessor_note = reasons.join(' | ');
       }
@@ -2007,7 +2088,10 @@ footer {
         plantM = isSummer ? 10 : 5;
         cycleM = Math.floor((chosenCrop.cycle_days_mid || 120) / 30) || 4;
         baseScore = computeLocalCropScore(chosenKey, chosenCrop, climate, plantM, cycleM);
-        if (prevKey && prevCrop) {
+        if (baseScore.score <= 0.0) {
+          rotBonus = 0;
+          reasons = ['Cultivo inviable en este período agroclimático'];
+        } else if (prevKey && prevCrop) {
           const compat = clientPredecessorCompatibility(chosenKey, chosenCrop, prevKey, prevCrop);
           let b = compat.bonus;
           const r = [...compat.reasons];
@@ -2037,7 +2121,7 @@ footer {
             b -= 7;
             r.push('✗ Cultivo en rotación o historial reciente');
           }
-          const tot = sc.score + b;
+          const tot = sc.score <= 0.0 ? 0.0 : Math.max(0, sc.score + b);
           if (tot > bestScore) {
             bestScore = tot;
             chosenKey = k;
@@ -2118,23 +2202,53 @@ footer {
     const latR = Math.round(lat * 100) / 100;
     const lonR = Math.round(lon * 100) / 100;
 
-    let usdaClass = 'Franco limoso', sandPct = 32, siltPct = 48, clayPct = 20;
-    let cc030 = 29.0, pmp030 = 13.5, cc3060 = 30.5, pmp3060 = 14.5;
-    let socVal = 17.5, phVal = 6.6, drainage = 'Bueno a moderado';
+    let usdaClass = 'Franco', sandPct = 38, siltPct = 40, clayPct = 22;
+    let cc030 = 28.0, pmp030 = 14.0, cc3060 = 29.0, pmp3060 = 14.5;
+    let socVal = 18.0, phVal = 6.6, drainage = 'Bueno a moderado';
+    let soilSrc = 'SoilGrids (ISRIC 250m) / Mollisol Templado Estándar';
 
-    if (lat <= -32.5 && lat >= -35.5 && lon <= -59 && lon >= -62.5) {
+    // 1. Bioma Ártico / Boreal / Permafrost (|lat| >= 55)
+    if (Math.abs(latR) >= 55.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Criosol de Tundra (Permafrost)';
+      usdaClass = 'Franco'; // Criosol
+      sandPct = 46.0; siltPct = 42.0; clayPct = 12.0;
+      cc030 = 20.0; pmp030 = 14.0; cc3060 = 17.0; pmp3060 = 13.0; // awc = 6% + 4% = 30mm
+      socVal = 38.5; phVal = 5.2; drainage = 'Deficiente por permafrost continuo impermeable';
+    }
+    // 2. Desiertos Hiperáridos Globales (Sahara, Arabia, Atacama)
+    else if ((latR >= 15.0 && latR <= 32.0 && lonR >= -18.0 && lonR <= 55.0) || (Math.abs(latR) >= 18.0 && Math.abs(latR) <= 30.0 && lonR >= -72.0 && lonR <= -68.0)) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Arenosol Desértico Aridisol';
+      usdaClass = 'Arenoso';
+      sandPct = 91.0; siltPct = 5.5; clayPct = 3.5;
+      cc030 = 9.0; pmp030 = 3.5; cc3060 = 8.5; pmp3060 = 3.5; // awc = 5.5% + 5.0% = 31.5mm
+      socVal = 2.1; phVal = 8.3; drainage = 'Excesivo';
+    }
+    // 3. Zonas Tropicales Húmedas (|lat| <= 15)
+    else if (Math.abs(latR) <= 15.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Ferralsol/Oxisol Tropical';
+      usdaClass = 'Arcilloso';
+      sandPct = 30.0; siltPct = 26.0; clayPct = 44.0;
+      cc030 = 32.0; pmp030 = 21.0; cc3060 = 33.0; pmp3060 = 22.0;
+      socVal = 14.5; phVal = 4.9; drainage = 'Bueno';
+    }
+    // 4. Regiones Agrícolas Calibradas de Sudamérica (Argentina / Cono Sur)
+    else if (lat <= -32.5 && lat >= -35.5 && lon <= -59 && lon >= -62.5) {
+      soilSrc = 'SoilGrids (ISRIC 250m) / Calibrado';
       usdaClass = 'Franco limoso'; sandPct = 22; siltPct = 54; clayPct = 24;
       cc030 = 31.0; pmp030 = 13.5; cc3060 = 33.0; pmp3060 = 14.5;
       socVal = 22.5; phVal = 6.3; drainage = 'Bueno';
     } else if (lat <= -30 && lat >= -34 && lon <= -62.5 && lon >= -65.5) {
+      soilSrc = 'SoilGrids (ISRIC 250m) / Calibrado';
       usdaClass = 'Franco'; sandPct = 48.8; siltPct = 32.5; clayPct = 18.7;
       cc030 = 26.5; pmp030 = 12.5; cc3060 = 28.0; pmp3060 = 13.5;
       socVal = 14.8; phVal = 6.9; drainage = 'Rápido a moderado';
     } else if (lat <= -36.5 && lat >= -39 && lon <= -57 && lon >= -60) {
+      soilSrc = 'SoilGrids (ISRIC 250m) / Calibrado';
       usdaClass = 'Franco arcilloso'; sandPct = 28; siltPct = 34; clayPct = 38;
       cc030 = 33.0; pmp030 = 16.5; cc3060 = 35.0; pmp3060 = 18.0;
       socVal = 26.0; phVal = 6.1; drainage = 'Moderado';
     } else if (lat <= -25.5 && lat >= -29 && lon <= -64 && lon >= -67) {
+      soilSrc = 'SoilGrids (ISRIC 250m) / Calibrado';
       usdaClass = 'Franco arenoso aluvial'; sandPct = 62; siltPct = 24; clayPct = 14;
       cc030 = 22.0; pmp030 = 9.5; cc3060 = 23.5; pmp3060 = 10.5;
       socVal = 11.0; phVal = 7.4; drainage = 'Rápido';
@@ -2149,7 +2263,7 @@ footer {
     const phClass = phVal < 5.6 ? 'Ácido' : (phVal < 6.6 ? 'Ligeramente ácido' : (phVal <= 7.3 ? 'Neutro' : 'Alcalino'));
 
     const soil = {
-      source: 'SoilGrids (ISRIC 250m) / Calibrado',
+      source: soilSrc,
       coordinates: { latitude: latR, longitude: lonR },
       texture: {
         usda_class: usdaClass,
@@ -2197,16 +2311,87 @@ footer {
     const now = new Date();
     const startYear = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now - startYear) / 86400000);
-    const seasonFactor = 1.0 + 0.18 * Math.sin(2 * Math.PI * (dayOfYear - 30) / 365);
+    const curMonth = now.getUTCMonth() + 1;
 
-    const baseSurf = (0.24 * rainFactor * seasonFactor) + ((locSeed % 7) - 3) * 0.012;
-    const surfaceVol = Math.round(Math.max(0.08, Math.min(0.48, baseSurf)) * 1000) / 1000;
-    const surfacePct = Math.round((surfaceVol * 100 / 0.45) * 10) / 10;
+    let seasonFactor = 1.0;
+    if (latR >= 0) {
+      seasonFactor = 1.0 + 0.18 * Math.sin(2 * Math.PI * (dayOfYear - 213) / 365);
+    } else {
+      seasonFactor = 1.0 + 0.18 * Math.sin(2 * Math.PI * (dayOfYear - 30) / 365);
+    }
 
-    let surfStatus = 'Adecuado', surfClass = 'optimal', surfDesc = 'Humedad superficial viable para siembra.';
-    if (surfacePct >= 80) { surfStatus = 'Exceso hídrico'; surfClass = 'alert'; surfDesc = 'Saturación en primeros 5 cm; riesgo de anegamiento.'; }
-    else if (surfacePct >= 50) { surfStatus = 'Óptimo siembra'; surfClass = 'optimal'; surfDesc = 'Cama de siembra con humedad ideal para germinación.'; }
-    else if (surfacePct < 30) { surfStatus = 'Déficit hídrico'; surfClass = 'warning'; surfDesc = 'Capa superficial seca; monitorear o sembrar profundo.'; }
+    let tempC = null;
+    if (climate && climate.climate_normal_monthly && climate.climate_normal_monthly.temp_avg_c) {
+      tempC = climate.climate_normal_monthly.temp_avg_c[curMonth] ?? climate.climate_normal_monthly.temp_avg_c[String(curMonth)];
+    }
+
+    let isFrozen = false;
+    if (tempC !== null && tempC <= 0.0) {
+      isFrozen = true;
+    } else if (Math.abs(latR) >= 55.0 && ([10, 11, 12, 1, 2, 3, 4].includes(curMonth) || (tempC !== null && tempC <= 2.0))) {
+      isFrozen = true;
+    }
+    const isHyperarid = (annualRain < 120) || ((latR >= 15 && latR <= 32 && lonR >= -18 && lonR <= 55) && annualRain < 200);
+
+    let surfaceVol, surfacePct, surfStatus, surfClass, surfDesc;
+    let rootVol, rootPct, rootZ, rootStatus, rootClass, rootDesc;
+    let rain30, et30, netBal, spi3, drought, spiClass;
+    let ndvi, esi;
+
+    if (isFrozen) {
+      surfaceVol = 0.04;
+      surfacePct = 0.0;
+      surfStatus = 'Suelo congelado';
+      surfClass = 'alert';
+      const tLabel = tempC !== null ? `${tempC}°C` : '< 0°C';
+      surfDesc = `❄️ Suelo congelado / Permafrost (T: ${tLabel}); cama de siembra biológicamente inactiva.`;
+
+      rootVol = 0.06;
+      rootPct = 0.0;
+      rootZ = -2.5;
+      rootStatus = 'Permafrost';
+      rootClass = 'alert';
+      rootDesc = 'Perfil radicular congelado en permafrost continuo; sin disponibilidad de agua líquida.';
+
+      rain30 = Math.round(Math.max(0, 15 * rainFactor) * 10) / 10;
+      et30 = 2.0;
+      netBal = Math.round((rain30 - et30) * 10) / 10;
+      spi3 = 0.0;
+      drought = 'Inactivo (Criosfera)';
+      spiClass = 'alert';
+      ndvi = 0.08;
+      esi = 0.10;
+    } else if (isHyperarid) {
+      surfaceVol = 0.03;
+      surfacePct = 5.0;
+      surfStatus = 'Déficit extremo';
+      surfClass = 'alert';
+      surfDesc = 'Capa superficial hiperárida desértica; humedad nula para implantación.';
+
+      rootVol = 0.05;
+      rootPct = 8.0;
+      rootZ = -2.2;
+      rootStatus = 'Agotado';
+      rootClass = 'alert';
+      rootDesc = 'Perfil arenoso desértico sin reserva hídrica.';
+
+      rain30 = Math.round(Math.max(0, 4 * rainFactor) * 10) / 10;
+      et30 = 110.0;
+      netBal = Math.round((rain30 - et30) * 10) / 10;
+      spi3 = -2.2;
+      drought = 'Extremo (Hiperárido)';
+      spiClass = 'alert';
+      ndvi = 0.04;
+      esi = 0.05;
+    } else {
+      const baseSurf = (0.24 * rainFactor * seasonFactor) + ((locSeed % 7) - 3) * 0.012;
+      surfaceVol = Math.round(Math.max(0.08, Math.min(0.48, baseSurf)) * 1000) / 1000;
+      surfacePct = Math.round((surfaceVol * 100 / 0.45) * 10) / 10;
+
+      surfStatus = 'Adecuado'; surfClass = 'optimal'; surfDesc = 'Humedad superficial viable para siembra.';
+      if (surfacePct >= 80) { surfStatus = 'Exceso hídrico'; surfClass = 'alert'; surfDesc = 'Saturación en primeros 5 cm; riesgo de anegamiento.'; }
+      else if (surfacePct >= 50) { surfStatus = 'Óptimo siembra'; surfClass = 'optimal'; surfDesc = 'Cama de siembra con humedad ideal para germinación.'; }
+      else if (surfacePct < 30) { surfStatus = 'Déficit hídrico'; surfClass = 'warning'; surfDesc = 'Capa superficial seca; monitorear o sembrar profundo.'; }
 
     const baseRoot = (0.28 * rainFactor) + ((locSeed % 5) - 2) * 0.015;
     const rootVol = Math.round(Math.max(0.12, Math.min(0.50, baseRoot)) * 1000) / 1000;
@@ -2227,6 +2412,7 @@ footer {
 
     const ndvi = Math.round(Math.max(0.2, Math.min(0.85, 0.45 * rainFactor * seasonFactor + ((locSeed % 13) - 6) * 0.02)) * 100) / 100;
     const esi = Math.round(Math.max(0.1, Math.min(1.0, 0.70 + (netBal / 200))) * 100) / 100;
+    }
 
     return {
       spatial_cell: `${latR}_${lonR}`,
@@ -2265,8 +2451,10 @@ footer {
     const veg = satData.vegetation_and_canopy || {};
     const soil = satData.soil_profile || {};
 
-    const surfCls = surf.status_class || (surf.percentage >= 45 ? 'optimal' : (surf.percentage >= 25 ? 'warning' : 'alert'));
-    const rootCls = root.status_class || (root.percentage >= 45 ? 'optimal' : (root.percentage >= 25 ? 'warning' : 'alert'));
+    const isSurfFrozen = (surf.status && (surf.status.toLowerCase().includes('congelado') || surf.status.toLowerCase().includes('permafrost')));
+    const isRootFrozen = (root.status && (root.status.toLowerCase().includes('congelado') || root.status.toLowerCase().includes('permafrost')));
+    const surfCls = surf.status_class || (isSurfFrozen ? 'alert' : (surf.percentage >= 45 ? 'optimal' : (surf.percentage >= 25 ? 'warning' : 'alert')));
+    const rootCls = root.status_class || (isRootFrozen ? 'alert' : (root.percentage >= 45 ? 'optimal' : (root.percentage >= 25 ? 'warning' : 'alert')));
     const wbCls = wb.status_class || (wb.spi_3_months >= -0.5 ? 'optimal' : 'warning');
 
     // Propiedades SoilGrids
@@ -2279,9 +2467,9 @@ footer {
     const wRet = soil.water_retention || {};
     const topsoilWr = wRet.topsoil_0_30cm || {};
     const subsoilWr = wRet.subsoil_30_60cm || {};
-    const awc030 = topsoilWr.awc_mm ?? wRet.awc_0_30cm_mm ?? 42.0;
-    const awc3060 = subsoilWr.awc_mm ?? wRet.awc_30_60cm_mm ?? 43.5;
-    const awcTotal = wRet.total_awc_0_60cm_mm ?? (soil.available_water_capacity_mm || Math.round((awc030 + awc3060) * 10) / 10);
+    const awcTotal = wRet.total_awc_0_60cm_mm ?? (soil.available_water_capacity_mm ?? 85.5);
+    const awc030 = topsoilWr.awc_mm ?? Math.round(awcTotal * 0.49 * 10) / 10;
+    const awc3060 = subsoilWr.awc_mm ?? Math.round((awcTotal - awc030) * 10) / 10;
 
     const orgCarb = soil.organic_carbon || soil.chemical || {};
     const socVal = orgCarb.soc_g_kg ?? 17.5;
@@ -2302,7 +2490,7 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>💧 Humedad Superficie (0-5 cm)</span>
-          <span class="sat-pill ${surfCls}">${surf.status || 'Adecuado'}</span>
+          <span class="sat-pill ${surfCls}">${isSurfFrozen ? '❄️ ' : ''}${surf.status || 'Adecuado'}</span>
         </div>
         <div class="sat-card-val">
           ${surf.percentage || 0}% <small>(${surf.volumetric_m3_m3 || 0} m³/m³)</small>
@@ -2314,7 +2502,7 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🌱 Humedad Radicular (0-100 cm)</span>
-          <span class="sat-pill ${rootCls}">${root.status || 'Favorable'} (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})</span>
+          <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${root.status || 'Favorable'}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
         </div>
         <div class="sat-card-val">
           ${root.percentage || 0}% <small>(${root.volumetric_m3_m3 || 0} m³/m³)</small>
@@ -2403,9 +2591,11 @@ footer {
         rotPayload.first_crop_key = firstCrop;
       }
 
-      // Timeout corto (2.5s) para detectar si no hay servidor backend (ej. GitHub Pages estático)
+      // Timeout adaptativo: 15s si está conectado a localhost/127.0.0.1 (permite a las APIs reales de NASA POWER y SoilGrids responder), o 3.5s si es GitHub Pages estático
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const timeoutMs = isLocalhost ? 15000 : 3500;
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 2500);
+      const tid = setTimeout(() => ctrl.abort(), timeoutMs);
 
       const prevCropsParam = previousCrops.length ? `&previous_crops=${encodeURIComponent(previousCrops.join(','))}` : '';
       const [rankingRes, rotationRes, climateRes, satRes] = await Promise.all([
@@ -2434,6 +2624,13 @@ footer {
         satData = climate.satellite_indicators;
       } else {
         satData = getClientSatelliteReadings(lat, lon, climate);
+      }
+
+      // Sincronización mandatoria: el panel superior y las tarjetas de cultivo deben
+      // consumir con precisión matemática el mismo perfil de suelo SoilGrids
+      const unifiedSoil = (ranking && ranking.soil_profile) || (climate && climate.soil_profile) || (satData && satData.soil_profile);
+      if (unifiedSoil && satData) {
+        satData.soil_profile = unifiedSoil;
       }
 
     } catch (err) {

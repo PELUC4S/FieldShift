@@ -80,8 +80,49 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
     lat_r, lon_r = round(lat, 2), round(lon, 2)
     seed = int((abs(lat_r) * 1000 + abs(lon_r) * 100)) % 10000
 
-    # 1. Zona Núcleo / Pergamino / Santa Fe Sur (-32.5 a -35.5, -62.5 a -59.0)
-    if -35.5 <= lat_r <= -32.5 and -62.5 <= lon_r <= -59.0:
+    # 1. Bioma Ártico / Boreal / Permafrost (Siberia, Norte de Canadá, Alaska, Escandinavia: |lat| >= 55)
+    if abs(lat_r) >= 55.0:
+        source_name = "ISRIC SoilGrids / Bioma Criosol de Tundra (Permafrost)"
+        clay_0_30 = 12.0
+        sand_0_30 = 46.0
+        silt_0_30 = 42.0
+        soc_g_kg = 38.5  # Alta materia orgánica no mineralizada por frío extremo
+        ph = 5.2
+        # Retención efectiva somera muy limitada por horizonte permafrost helado
+        cc_0_30, pmp_0_30 = 20.0, 14.0  # awc = 6.0% -> 18.0 mm
+        cc_30_60, pmp_30_60 = 17.0, 13.0  # awc = 4.0% -> 12.0 mm (subsuelo congelado)
+        fert_desc = "Restringido por Permafrost"
+        drainage_desc = "Deficiente por permafrost impermeable"
+
+    # 2. Desiertos Hiperáridos y Zonas Áridas Globales (Sahara, Arabia, Atacama, interior australiano)
+    elif (15.0 <= lat_r <= 32.0 and -18.0 <= lon_r <= 55.0) or (abs(lat_r) >= 18.0 and abs(lat_r) <= 30.0 and -72.0 <= lon_r <= -68.0):
+        source_name = "ISRIC SoilGrids / Bioma Arenosol Desértico Aridisol"
+        clay_0_30 = 3.5
+        sand_0_30 = 91.0
+        silt_0_30 = 5.5
+        soc_g_kg = 2.1   # Suelo mineral yermo casi sin materia orgánica
+        ph = 8.3
+        cc_0_30, pmp_0_30 = 9.0, 3.5    # awc = 5.5% -> 16.5 mm
+        cc_30_60, pmp_30_60 = 8.5, 3.5  # awc = 5.0% -> 15.0 mm
+        fert_desc = "Muy Bajo (Suelo mineral desértico)"
+        drainage_desc = "Excesivo"
+
+    # 3. Zonas Tropicales Húmedas / Ecuatoriales (|lat| <= 15)
+    elif abs(lat_r) <= 15.0:
+        source_name = "ISRIC SoilGrids / Bioma Ferralsol/Oxisol Tropical"
+        clay_0_30 = 44.0
+        sand_0_30 = 30.0
+        silt_0_30 = 26.0
+        soc_g_kg = 14.5
+        ph = 4.9
+        cc_0_30, pmp_0_30 = 32.0, 21.0
+        cc_30_60, pmp_30_60 = 33.0, 22.0
+        fert_desc = "Medio a Bajo (Fijación de P)"
+        drainage_desc = "Bueno"
+
+    # 4. Regiones Agrícolas Calibradas de Sudamérica (Argentina / Cono Sur)
+    elif -35.5 <= lat_r <= -32.5 and -62.5 <= lon_r <= -59.0:
+        source_name = "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado"
         clay_0_30 = round(23.0 + ((seed % 5) - 2) * 0.8, 1)
         sand_0_30 = round(16.0 + ((seed % 7) - 3) * 0.6, 1)
         silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
@@ -89,9 +130,11 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         ph = round(6.5 + ((seed % 5) - 2) * 0.1, 1)
         cc_0_30, pmp_0_30 = 34.0, 16.0
         cc_30_60, pmp_30_60 = 35.5, 17.5
+        fert_desc = "Alto"
+        drainage_desc = "Bueno a moderado"
 
-    # 2. Córdoba Centro / Secano (-30.0 a -34.0, -65.5 a -62.5)
     elif -34.0 <= lat_r <= -30.0 and -65.5 <= lon_r <= -62.5:
+        source_name = "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado"
         clay_0_30 = round(18.0 + ((seed % 5) - 2) * 0.7, 1)
         sand_0_30 = round(44.0 + ((seed % 9) - 4) * 1.2, 1)
         silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
@@ -99,9 +142,11 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         ph = round(6.8 + ((seed % 5) - 2) * 0.1, 1)
         cc_0_30, pmp_0_30 = 26.5, 12.5
         cc_30_60, pmp_30_60 = 28.0, 13.5
+        fert_desc = "Bajo" if soc_g_kg < 15.0 else "Medio"
+        drainage_desc = "Rápido a moderado"
 
-    # 3. Balcarce / Mar y Sierras (-36.5 a -39.0, -60.0 a -57.0)
     elif -39.0 <= lat_r <= -36.5 and -60.0 <= lon_r <= -57.0:
+        source_name = "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado"
         clay_0_30 = round(26.0 + ((seed % 5) - 2) * 0.8, 1)
         sand_0_30 = round(24.0 + ((seed % 7) - 3) * 0.9, 1)
         silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
@@ -109,9 +154,11 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         ph = round(6.2 + ((seed % 5) - 2) * 0.1, 1)
         cc_0_30, pmp_0_30 = 36.0, 17.0
         cc_30_60, pmp_30_60 = 37.0, 18.5
+        fert_desc = "Alto"
+        drainage_desc = "Bueno"
 
-    # 4. NOA / Catamarca / Tucumán / Santiago (-25.5 a -29.0, -67.0 a -64.0)
     elif -29.0 <= lat_r <= -25.5 and -67.0 <= lon_r <= -64.0:
+        source_name = "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado"
         clay_0_30 = round(14.0 + ((seed % 5) - 2) * 0.6, 1)
         sand_0_30 = round(56.0 + ((seed % 9) - 4) * 1.3, 1)
         silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
@@ -119,27 +166,32 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         ph = round(7.4 + ((seed % 5) - 2) * 0.1, 1)
         cc_0_30, pmp_0_30 = 23.0, 10.5
         cc_30_60, pmp_30_60 = 24.5, 11.5
+        fert_desc = "Bajo"
+        drainage_desc = "Rápido"
 
-    # 5. Pampeano Estándar
+    # 5. Mollisol / Cambisol Templado Estándar Internacional
     else:
-        clay_0_30 = 20.0
-        sand_0_30 = 35.0
-        silt_0_30 = 45.0
-        soc_g_kg = 17.5
+        source_name = "SoilGrids (ISRIC) / Mollisol Templado Estándar"
+        clay_0_30 = 22.0
+        sand_0_30 = 38.0
+        silt_0_30 = 40.0
+        soc_g_kg = 18.0
         ph = 6.6
-        cc_0_30, pmp_0_30 = 30.0, 14.5
-        cc_30_60, pmp_30_60 = 31.0, 15.0
+        cc_0_30, pmp_0_30 = 28.0, 14.0
+        cc_30_60, pmp_30_60 = 29.0, 14.5
+        fert_desc = "Medio"
+        drainage_desc = "Bueno a moderado"
 
     texture = classify_usda_texture(sand_0_30, silt_0_30, clay_0_30)
-    awc_pct_0_30 = round(cc_0_30 - pmp_0_30, 1)
-    awc_pct_30_60 = round(cc_30_60 - pmp_30_60, 1)
+    awc_pct_0_30 = max(2.0, round(cc_0_30 - pmp_0_30, 1))
+    awc_pct_30_60 = max(2.0, round(cc_30_60 - pmp_30_60, 1))
     awc_mm_0_30 = round((awc_pct_0_30 / 100.0) * 300.0, 1)
     awc_mm_30_60 = round((awc_pct_30_60 / 100.0) * 300.0, 1)
     total_awc_mm = round(awc_mm_0_30 + awc_mm_30_60, 1)
     om_pct = round((soc_g_kg / 10.0) * 1.724, 2)
 
     return {
-        "source": "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado",
+        "source": source_name,
         "is_fallback": True,
         "coordinates": {"latitude": lat_r, "longitude": lon_r},
         "texture": {
@@ -169,7 +221,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         "organic_carbon": {
             "soc_g_kg": soc_g_kg,
             "organic_matter_pct": om_pct,
-            "fertility_level": "Bajo" if soc_g_kg < 15.0 else ("Alto" if soc_g_kg >= 25.0 else "Medio"),
+            "fertility_level": fert_desc,
             "depth_range": "0-30cm",
         },
         "acidity": {
@@ -177,6 +229,9 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
             "ph_class": "Neutro" if 6.2 <= ph <= 7.3 else ("Ligeramente ácido" if 5.5 <= ph < 6.2 else ("Ácido" if ph < 5.5 else "Alcalino")),
             "depth_range": "0-30cm",
         },
+        "available_water_capacity_mm": total_awc_mm,
+        "organic_matter_pct": om_pct,
+        "drainage": drainage_desc,
     }
 
 
@@ -330,6 +385,8 @@ def query_soilgrids(lat: float, lon: float, timeout_s: float = 4.0) -> dict[str,
                     "ph_class": "Neutro" if 6.2 <= ph <= 7.3 else ("Ligeramente ácido" if 5.5 <= ph < 6.2 else ("Ácido" if ph < 5.5 else "Alcalino")),
                     "depth_range": "0-30cm",
                 },
+                "available_water_capacity_mm": total_awc_mm,
+                "organic_matter_pct": om_pct,
             }
 
             try:

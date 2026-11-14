@@ -22,57 +22,6 @@ CACHE_DIR = BASE_DIR / "data" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _determine_soil_profile(lat: float, lon: float) -> dict[str, Any]:
-    """
-    Determina el perfil y textura de suelo característico para coordenadas
-    de la región agrícola sudamericana (Argentina: Pampa Húmeda, Núcleo, Centro, NOA, Sur).
-    """
-    # Pergamino / Zona Núcleo (-33 a -35, -62 a -59)
-    if -35.5 <= lat <= -32.5 and -62.5 <= lon <= -59.0:
-        return {
-            "texture": "Franco-limoso",
-            "available_water_capacity_mm": 155.0,
-            "organic_matter_pct": 3.2,
-            "drainage": "Bueno a moderado",
-            "rooting_depth_cm": 120,
-        }
-    # Córdoba Centro / Secano (-30.5 a -33.5, -65.5 a -62.5)
-    elif -34.0 <= lat <= -30.0 and -65.5 <= lon <= -62.5:
-        return {
-            "texture": "Franco-arenoso a Franco",
-            "available_water_capacity_mm": 125.0,
-            "organic_matter_pct": 2.2,
-            "drainage": "Rápido a moderado",
-            "rooting_depth_cm": 100,
-        }
-    # Balcarce / Sur Bonaerense (-36.5 a -39.0, -60.0 a -57.5)
-    elif -39.0 <= lat <= -36.5 and -60.0 <= lon <= -57.0:
-        return {
-            "texture": "Franco-arcilloso con tosca profunda",
-            "available_water_capacity_mm": 140.0,
-            "organic_matter_pct": 4.1,
-            "drainage": "Bueno",
-            "rooting_depth_cm": 90,
-        }
-    # NOA / Catamarca / Tucumán (-26 a -29, -66 a -64)
-    elif -29.0 <= lat <= -25.5 and -67.0 <= lon <= -64.0:
-        return {
-            "texture": "Franco-arenoso aluvial",
-            "available_water_capacity_mm": 110.0,
-            "organic_matter_pct": 1.7,
-            "drainage": "Excesivo a bueno",
-            "rooting_depth_cm": 85,
-        }
-    # Genérico Pampeano
-    return {
-        "texture": "Franco-limoso agrícola",
-        "available_water_capacity_mm": 130.0,
-        "organic_matter_pct": 2.6,
-        "drainage": "Bueno",
-        "rooting_depth_cm": 100,
-    }
-
-
 def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """
     Calcula y modela las lecturas satelitales en tiempo real según las fuentes oficiales de NASA y SoilGrids:
@@ -95,73 +44,133 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
     # Factor de humedad regional basado en isoyetas
     rain_factor = max(0.5, min(1.4, annual_rain / 850.0))
 
-    # Variación sinusoidal estacional basada en el día actual
+    # Variación estacional según hemisferio
     today = datetime.now(timezone.utc)
     day_of_year = today.timetuple().tm_yday
-    # Hemisferio Sur: lluvias y evaporación más altas en dic-mar
-    season_factor = 1.0 + 0.18 * math.sin(2 * math.pi * (day_of_year - 30) / 365)
+    current_month = today.month
 
-    # 1. SMAP Humedad Superficial (0-5 cm, m3/m3 y %)
-    base_surf_vol = (0.24 * rain_factor * season_factor) + ((loc_seed % 7) - 3) * 0.012
-    surface_vol = max(0.08, min(0.48, round(base_surf_vol, 3)))
-    surface_pct = round(surface_vol * 100 / 0.45, 1)  # Normalizado sobre porosidad media 45%
-
-    if surface_pct >= 85:
-        surface_status = "exceso_hidrico"
-        surface_desc = "Saturación por exceso de precipitaciones recientes; riesgo de compactación."
-    elif surface_pct >= 55:
-        surface_status = "optimo_siembra"
-        surface_desc = "Cama de siembra con humedad ideal para germinación y emergencia uniforme."
-    elif surface_pct >= 35:
-        surface_status = "adecuado"
-        surface_desc = "Humedad superficial moderada; viable para siembra inmediata."
-    elif surface_pct >= 20:
-        surface_status = "deficit_moderado"
-        surface_desc = "Capa superficial seca; esperar evento de lluvia o sembrar a mayor profundidad."
+    if lat_r >= 0:
+        # Hemisferio Norte: verano en jun-ago, invierno en dic-feb
+        season_factor = 1.0 + 0.18 * math.sin(2 * math.pi * (day_of_year - 213) / 365)
     else:
-        surface_status = "deficit_severo"
-        surface_desc = "Déficit severo en primeros 5 cm; no se recomienda siembra superficial."
+        # Hemisferio Sur: lluvias y evaporación más altas en dic-mar
+        season_factor = 1.0 + 0.18 * math.sin(2 * math.pi * (day_of_year - 30) / 365)
 
-    # 2. SMAP Humedad en Zona Radicular (0-100 cm, m3/m3 y %)
-    base_root_vol = (0.28 * rain_factor) + ((loc_seed % 5) - 2) * 0.015
-    rootzone_vol = max(0.12, min(0.50, round(base_root_vol, 3)))
-    rootzone_pct = round(rootzone_vol * 100 / 0.48, 1)
+    # Evaluar si la ubicación presenta condiciones de congelamiento / permafrost / criosfera
+    temp_c = None
+    if climate_data and "climate_normal_monthly" in climate_data:
+        temps = climate_data["climate_normal_monthly"].get("temp_avg_c", {})
+        temp_c = temps.get(str(current_month), temps.get(current_month))
 
-    # Anomalía respecto a la media histórica del mes (Z-score)
-    rootzone_anomaly_z = round(((rootzone_vol - (0.28 * rain_factor)) / 0.04), 2)
+    is_frozen = False
+    if temp_c is not None and temp_c <= 0.0:
+        is_frozen = True
+    elif abs(lat_r) >= 55.0 and (current_month in [10, 11, 12, 1, 2, 3, 4] or (temp_c is not None and temp_c <= 2.0)):
+        is_frozen = True
 
-    if rootzone_pct >= 70:
-        rootzone_status = "abundante"
-        rootzone_desc = "Excelente recarga en todo el perfil radicular; alta resiliencia estival."
-    elif rootzone_pct >= 45:
-        rootzone_status = "favorable"
-        rootzone_desc = "Buena disponibilidad de agua útil en el primer metro de suelo."
-    elif rootzone_pct >= 25:
-        rootzone_status = "regular"
-        rootzone_desc = "Reserva hídrica moderada; priorizar cultivos con raíces profundas y menor consumo."
+    # Evaluar si es bioma desértico hiperárido (Sahara, etc.)
+    is_hyperarid = (annual_rain < 120.0) or ((15.0 <= lat_r <= 32.0 and -18.0 <= lon_r <= 55.0) and annual_rain < 200.0)
+
+    if is_frozen:
+        surface_vol = 0.04
+        surface_pct = 0.0
+        surface_status = "suelo_congelado"
+        t_label = f"{temp_c}°C" if temp_c is not None else "< 0°C"
+        surface_desc = f"❄️ Suelo congelado / Permafrost (T: {t_label}); cama de siembra biológicamente inactiva."
+        
+        rootzone_vol = 0.06
+        rootzone_pct = 0.0
+        rootzone_status = "permafrost"
+        rootzone_anomaly_z = -2.5
+        rootzone_desc = "Perfil radicular congelado en permafrost continuo; sin disponibilidad de agua líquida."
+        
+        rain_30d = round(max(0.0, 15.0 * rain_factor), 1)
+        et_actual_30d = 2.0
+        water_balance_30d = round(rain_30d - et_actual_30d, 1)
+        spi_3 = 0.0
+        drought_risk = "Inactivo (Criosfera / Permafrost)"
+        ndvi_est = 0.08
+        esi_canopy = 0.10
+    elif is_hyperarid:
+        surface_vol = 0.03
+        surface_pct = 5.0
+        surface_status = "deficit_extremo"
+        surface_desc = "Capa superficial hiperárida desértica; humedad nula para implantación."
+        
+        rootzone_vol = 0.05
+        rootzone_pct = 8.0
+        rootzone_status = "agotado"
+        rootzone_anomaly_z = -2.2
+        rootzone_desc = "Perfil arenoso desértico sin reserva hídrica."
+        
+        rain_30d = round(max(0.0, 4.0 * rain_factor), 1)
+        et_actual_30d = 110.0
+        water_balance_30d = round(rain_30d - et_actual_30d, 1)
+        spi_3 = -2.2
+        drought_risk = "Extremo (Hiperárido / Desierto)"
+        ndvi_est = 0.04
+        esi_canopy = 0.05
     else:
-        rootzone_status = "critico"
-        rootzone_desc = "Perfil hídrico agotado; alto riesgo de estrés hídrico para cultivos de alta demanda."
+        # 1. SMAP Humedad Superficial (0-5 cm, m3/m3 y %)
+        base_surf_vol = (0.24 * rain_factor * season_factor) + ((loc_seed % 7) - 3) * 0.012
+        surface_vol = max(0.08, min(0.48, round(base_surf_vol, 3)))
+        surface_pct = round(surface_vol * 100 / 0.45, 1)  # Normalizado sobre porosidad media 45%
 
-    # 3. GPM IMERG & OpenET: Balance Hídrico reciente (últimos 30 días)
-    rain_30d = round(max(5.0, 75.0 * rain_factor * season_factor + ((loc_seed % 19) - 9)), 1)
-    et_actual_30d = round(max(20.0, 85.0 * season_factor + ((loc_seed % 11) - 5)), 1)
-    water_balance_30d = round(rain_30d - et_actual_30d, 1)
+        if surface_pct >= 85:
+            surface_status = "exceso_hidrico"
+            surface_desc = "Saturación por exceso de precipitaciones recientes; riesgo de compactación."
+        elif surface_pct >= 55:
+            surface_status = "optimo_siembra"
+            surface_desc = "Cama de siembra con humedad ideal para germinación y emergencia uniforme."
+        elif surface_pct >= 35:
+            surface_status = "adecuado"
+            surface_desc = "Humedad superficial moderada; viable para siembra inmediata."
+        elif surface_pct >= 20:
+            surface_status = "deficit_moderado"
+            surface_desc = "Capa superficial seca; esperar evento de lluvia o sembrar a mayor profundidad."
+        else:
+            surface_status = "deficit_severo"
+            surface_desc = "Déficit severo en primeros 5 cm; no se recomienda siembra superficial."
 
-    # SPI-3 (Índice de Precipitación Estandarizado a 3 meses)
-    spi_3 = round(math.tanh(water_balance_30d / 50.0) * 1.5, 2)
-    if spi_3 >= 1.0:
-        drought_risk = "Sin riesgo (Húmedo)"
-    elif spi_3 >= -0.5:
-        drought_risk = "Bajo (Condición Normal)"
-    elif spi_3 >= -1.2:
-        drought_risk = "Moderado (Alerta de sequía incipiente)"
-    else:
-        drought_risk = "Alto (Sequía severa)"
+        # 2. SMAP Humedad en Zona Radicular (0-100 cm, m3/m3 y %)
+        base_root_vol = (0.28 * rain_factor) + ((loc_seed % 5) - 2) * 0.015
+        rootzone_vol = max(0.12, min(0.50, round(base_root_vol, 3)))
+        rootzone_pct = round(rootzone_vol * 100 / 0.48, 1)
 
-    # 4. HLS / MODIS: NDVI y ESI (Estrés de canopia)
-    ndvi_est = round(max(0.20, min(0.85, 0.45 * rain_factor * season_factor + ((loc_seed % 13) - 6) * 0.02)), 2)
-    esi_canopy = round(max(0.10, min(1.0, 0.70 + (water_balance_30d / 200.0))), 2)
+        # Anomalía respecto a la media histórica del mes (Z-score)
+        rootzone_anomaly_z = round(((rootzone_vol - (0.28 * rain_factor)) / 0.04), 2)
+
+        if rootzone_pct >= 70:
+            rootzone_status = "abundante"
+            rootzone_desc = "Excelente recarga en todo el perfil radicular; alta resiliencia estival."
+        elif rootzone_pct >= 45:
+            rootzone_status = "favorable"
+            rootzone_desc = "Buena disponibilidad de agua útil en el primer metro de suelo."
+        elif rootzone_pct >= 25:
+            rootzone_status = "regular"
+            rootzone_desc = "Reserva hídrica moderada; priorizar cultivos con raíces profundas y menor consumo."
+        else:
+            rootzone_status = "critico"
+            rootzone_desc = "Perfil hídrico agotado; alto riesgo de estrés hídrico para cultivos de alta demanda."
+
+        # 3. GPM IMERG & OpenET: Balance Hídrico reciente (últimos 30 días)
+        rain_30d = round(max(5.0, 75.0 * rain_factor * season_factor + ((loc_seed % 19) - 9)), 1)
+        et_actual_30d = round(max(20.0, 85.0 * season_factor + ((loc_seed % 11) - 5)), 1)
+        water_balance_30d = round(rain_30d - et_actual_30d, 1)
+
+        spi_3 = round(math.tanh(water_balance_30d / 50.0) * 1.5, 2)
+        if spi_3 >= 1.0:
+            drought_risk = "Sin riesgo (Húmedo)"
+        elif spi_3 >= -0.5:
+            drought_risk = "Bajo (Condición Normal)"
+        elif spi_3 >= -1.2:
+            drought_risk = "Moderado (Alerta de sequía incipiente)"
+        else:
+            drought_risk = "Alto (Sequía severa)"
+
+        # 4. HLS / MODIS: NDVI y ESI (Estrés de canopia)
+        ndvi_est = round(max(0.20, min(0.85, 0.45 * rain_factor * season_factor + ((loc_seed % 13) - 6) * 0.02)), 2)
+        esi_canopy = round(max(0.10, min(1.0, 0.70 + (water_balance_30d / 200.0))), 2)
 
     return {
         "spatial_cell": f"{lat_r}_{lon_r}",
@@ -206,23 +215,27 @@ def get_satellite_readings(lat: float, lon: float, climate_data: Optional[dict[s
     """
     Obtiene las lecturas satelitales consultando la caché local o generando
     el cálculo normalizado según especificaciones NASA.
+    Garantiza que el perfil edafológico (SoilGrids) esté siempre sincronizado con los cálculos agronómicos.
     """
     lat_r, lon_r = round(lat, 2), round(lon, 2)
     cache_file = CACHE_DIR / f"satelite_{lat_r}_{lon_r}.json"
 
+    readings = None
     if cache_file.exists():
         try:
-            return json.loads(cache_file.read_text(encoding="utf-8"))
+            readings = json.loads(cache_file.read_text(encoding="utf-8"))
         except Exception as e:
             logger.warning(f"Error al leer caché satelital {cache_file}: {e}")
 
-    # Calcular y persistir
-    readings = calculate_satellite_metrics(lat_r, lon_r, climate_data)
-    try:
-        cache_file.write_text(json.dumps(readings, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        logger.warning(f"No se pudo guardar caché satelital {cache_file}: {e}")
+    if not readings:
+        readings = calculate_satellite_metrics(lat_r, lon_r, climate_data)
+        try:
+            cache_file.write_text(json.dumps(readings, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"No se pudo guardar caché satelital {cache_file}: {e}")
 
+    # Sincronización mandatoria: inyectar SIEMPRE el perfil edafológico SoilGrids oficial y actualizado
+    readings["soil_profile"] = query_soilgrids(lat_r, lon_r)
     return readings
 
 

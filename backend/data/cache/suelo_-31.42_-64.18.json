@@ -39,5 +39,7 @@
     "ph_h2o": 6.9,
     "ph_class": "Neutro",
     "depth_range": "0-30cm"
-  }
+  },
+  "available_water_capacity_mm": 85.5,
+  "organic_matter_pct": 2.55
 }
