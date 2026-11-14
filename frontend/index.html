@@ -651,6 +651,47 @@ main {
   color: var(--dark-green);
 }
 
+
+.btn-gps {
+  width: 100%;
+  margin-top: .45rem;
+  padding: .45rem .6rem;
+  background: #fdfbf7;
+  border: 1.5px dashed var(--leaf-green);
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--dark-green);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+}
+.btn-gps:hover {
+  background: #e8f5e9;
+  border-style: solid;
+}
+.coord-badge-info {
+  font-size: .75rem;
+  color: #666;
+  margin-top: .4rem;
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.coord-badge-info strong {
+  color: var(--dark-green);
+  font-family: monospace;
+}
+.coord-tip {
+  font-size: .73rem;
+  color: #888;
+  margin-top: .25rem;
+  font-style: italic;
+}
+
 .chip.active {
   background: var(--leaf-green);
   border-color: var(--leaf-green);
@@ -902,27 +943,32 @@ footer {
         <canvas id="mapCanvas" class="hidden"></canvas>
       </div>
 
+      <!-- Coordinates Input (Manual & Dinámica) -->
+      <div class="form-group">
+        <label>📍 Coordenadas del Lote (Ingreso Manual o Clic en Mapa)</label>
+        <div class="coord-row">
+          <div>
+            <input type="number" id="inputLat" value="-31.42" step="0.01" min="-90" max="90" placeholder="Latitud ej: -31.42">
+          </div>
+          <div>
+            <input type="number" id="inputLon" value="-64.18" step="0.01" min="-180" max="180" placeholder="Longitud ej: -64.18">
+          </div>
+        </div>
+        <button type="button" class="btn-gps" id="btnGps">📍 Detectar mi ubicación actual (GPS)</button>
+        <div class="coord-badge-info">
+          <span>🎯 Coordenada activa: </span><strong id="coordDisplay">-31.42, -64.18</strong>
+        </div>
+        <div class="coord-tip">💡 Podés escribir cualquier latitud y longitud, hacer clic en el mapa o elegir una región de acceso rápido.</div>
+      </div>
+
       <!-- Presets -->
       <div class="form-group">
-        <label>Región Agrícola de Referencia</label>
+        <label>O Seleccionar Región Agrícola</label>
         <div class="preset-chips" id="presetChips">
           <button type="button" class="chip active" data-lat="-31.42" data-lon="-64.18">Córdoba (Centro)</button>
           <button type="button" class="chip" data-lat="-33.89" data-lon="-60.57">Pergamino (Núcleo)</button>
           <button type="button" class="chip" data-lat="-27.80" data-lon="-65.80">Singuil (Catamarca/NOA)</button>
           <button type="button" class="chip" data-lat="-37.85" data-lon="-58.26">Balcarce (Sur)</button>
-        </div>
-      </div>
-
-      <!-- Coordinates -->
-      <div class="form-group">
-        <label>Coordenadas (Lat / Lon)</label>
-        <div class="coord-row">
-          <div>
-            <input type="number" id="inputLat" value="-31.42" step="0.01" placeholder="Latitud">
-          </div>
-          <div>
-            <input type="number" id="inputLon" value="-64.18" step="0.01" placeholder="Longitud">
-          </div>
         </div>
       </div>
 
@@ -1158,21 +1204,67 @@ footer {
       const lat = (y / canvas.height) * (-33) + (-22);
       $lat.value = lat.toFixed(2);
       $lon.value = lon.toFixed(2);
+      document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+      const disp = document.getElementById('coordDisplay');
+      if (disp) disp.textContent = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
       drawMap();
     });
 
-    // Redraw on input change
-    $lat.addEventListener('change', drawMap);
-    $lon.addEventListener('change', drawMap);
+    function updateCoordDisplay() {
+      const latVal = parseFloat($lat.value) || 0;
+      const lonVal = parseFloat($lon.value) || 0;
+      const disp = document.getElementById('coordDisplay');
+      if (disp) disp.textContent = `${latVal.toFixed(2)}, ${lonVal.toFixed(2)}`;
+    }
 
-    // Preset chips interaction
+    // Input dinámico en vivo (al escribir o cambiar)
+    $lat.addEventListener('input', () => {
+      document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+      updateCoordDisplay();
+      drawMap();
+    });
+    $lon.addEventListener('input', () => {
+      document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+      updateCoordDisplay();
+      drawMap();
+    });
+    $lat.addEventListener('change', () => { updateCoordDisplay(); drawMap(); });
+    $lon.addEventListener('change', () => { updateCoordDisplay(); drawMap(); });
+
+    // Botón GPS / Geolocalización
+    const $btnGps = document.getElementById('btnGps');
+    if ($btnGps && navigator.geolocation) {
+      $btnGps.addEventListener('click', () => {
+        $btnGps.textContent = '⏳ Obteniendo GPS...';
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            $lat.value = pos.coords.latitude.toFixed(2);
+            $lon.value = pos.coords.longitude.toFixed(2);
+            document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+            updateCoordDisplay();
+            drawMap();
+            $btnGps.textContent = '✅ Ubicación detectada';
+            setTimeout(() => { $btnGps.textContent = '📍 Detectar mi ubicación actual (GPS)'; }, 3000);
+            analyze(); // Recalcular con la nueva coordenada
+          },
+          (err) => {
+            alert('No se pudo acceder al GPS: ' + err.message);
+            $btnGps.textContent = '📍 Detectar mi ubicación actual (GPS)';
+          }
+        );
+      });
+    }
+
+    // Clic en preset chips
     document.querySelectorAll('.preset-chips .chip').forEach(chip => {
       chip.addEventListener('click', () => {
         document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         $lat.value = chip.dataset.lat;
         $lon.value = chip.dataset.lon;
+        updateCoordDisplay();
         drawMap();
+        analyze(); // Analizar inmediatamente al tocar un preset
       });
     });
 
@@ -1185,15 +1277,75 @@ footer {
   const CLIMATES_DB = {"-27.8_-65.8": {"location": {"latitude": -27.8, "longitude": -65.8, "region_name": "Singuil (Catamarca/NOA)"}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 25.6, "2": 24.7, "3": 22.6, "4": 19.6, "5": 15.8, "6": 13.2, "7": 13.0, "8": 15.3, "9": 18.7, "10": 22.3, "11": 24.4, "12": 25.6}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}, "-31.42_-64.18": {"location": {"latitude": -31.42, "longitude": -64.18}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 24.2, "2": 23.3, "3": 21.2, "4": 18.2, "5": 14.4, "6": 11.8, "7": 11.6, "8": 13.9, "9": 17.3, "10": 20.9, "11": 23.0, "12": 24.2}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}, "-37.85_-58.26": {"location": {"latitude": -37.85, "longitude": -58.26, "region_name": "Balcarce (Sur)"}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 22.0, "2": 21.1, "3": 19.0, "4": 16.0, "5": 12.2, "6": 9.6, "7": 9.4, "8": 11.7, "9": 15.1, "10": 18.7, "11": 20.8, "12": 22.0}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}, "-33.89_-60.57": {"location": {"latitude": -33.89, "longitude": -60.57, "region_name": "Pergamino (Núcleo)"}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 24.6, "2": 23.7, "3": 21.6, "4": 18.6, "5": 14.8, "6": 12.2, "7": 12.0, "8": 14.3, "9": 17.7, "10": 21.3, "11": 23.4, "12": 24.6}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}};
 
   function getLocalClimate(lat, lon) {
+    // 1. Encontrar la estación de referencia más cercana
     let closest = null, minDist = Infinity;
     for (const key in CLIMATES_DB) {
       const c = CLIMATES_DB[key];
       const d = Math.hypot(lat - c.location.latitude, lon - c.location.longitude);
       if (d < minDist) { minDist = d; closest = c; }
     }
-    const res = JSON.parse(JSON.stringify(closest || Object.values(CLIMATES_DB)[0]));
-    res.location = { latitude: lat, longitude: lon };
-    return res;
+    const base = JSON.parse(JSON.stringify(closest || Object.values(CLIMATES_DB)[0]));
+
+    // 2. Modelo de gradiente agroclimático dinámico:
+    // Hacia el norte (latitud menos negativa) la temperatura sube ~0.65 °C por grado
+    const refLat = base.location.latitude;
+    const latDiff = lat - refLat;
+    const tempShift = latDiff * 0.65;
+
+    // Gradiente longitudinal: hacia el este más lluvia, hacia el oeste (precordillera) menos
+    const refLon = base.location.longitude;
+    const lonDiff = lon - refLon;
+    const precipFactor = Math.max(0.4, Math.min(1.6, 1.0 + (lonDiff * 0.04)));
+
+    const newTempAvg = {};
+    const newPrecipMm = {};
+    const newFrostByMonth = {};
+    const newHeatByMonth = {};
+    const monthlyNormals = [];
+    const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    for (let m = 1; m <= 12; m++) {
+      const bT = base.climate_normal_monthly.temp_avg_c[m] ?? base.climate_normal_monthly.temp_avg_c[String(m)] ?? 20;
+      const bP = base.climate_normal_monthly.precip_mm[m] ?? base.climate_normal_monthly.precip_mm[String(m)] ?? 50;
+
+      const adjT = Math.round((bT + tempShift) * 10) / 10;
+      const adjP = Math.round(bP * precipFactor * 10) / 10;
+      newTempAvg[m] = adjT;
+      newPrecipMm[m] = adjP;
+
+      // Heladas invernales (meses 5 a 9) aumentan a mayor latitud sur
+      const isWinter = (m >= 5 && m <= 9);
+      let frostBase = Math.max(0, (-lat - 26) * 0.3);
+      const adjFrost = isWinter ? Math.round(frostBase * (m === 7 ? 2.5 : 1.2) * 10) / 10 : 0.0;
+      newFrostByMonth[m] = adjFrost;
+
+      // Estrés térmico estival (>35°C) aumenta hacia el norte
+      const isSummer = (m <= 3 || m >= 10);
+      let heatBase = Math.max(0, (lat - (-36)) * 0.35);
+      const adjHeat = isSummer ? Math.round(heatBase * 1.8 * 10) / 10 : 0.0;
+      newHeatByMonth[m] = adjHeat;
+
+      monthlyNormals.push({
+        month: m,
+        month_name: monthNames[m - 1],
+        temp_mean: adjT,
+        temperature: adjT,
+        precipitation: adjP,
+        rainfall: adjP,
+        frost_days: adjFrost,
+        heat_days: adjHeat,
+        heat_stress_days: adjHeat
+      });
+    }
+
+    base.location = { latitude: lat, longitude: lon, is_dynamic: true };
+    base.climate_normal_monthly.temp_avg_c = newTempAvg;
+    base.climate_normal_monthly.precip_mm = newPrecipMm;
+    base.frost_days.mean_by_month = newFrostByMonth;
+    base.heat_stress_days.mean_by_month = newHeatByMonth;
+    base.monthly_normals = monthlyNormals;
+    base.annual_rainfall.mean_mm = Math.round(Object.values(newPrecipMm).reduce((a, b) => a + b, 0));
+    return base;
   }
 
   function tempFitness(crop, monthlyTemp, plantingMonth, cycleMonths) {
@@ -1703,6 +1855,8 @@ footer {
       $rankGrid.appendChild(card);
     });
 
+    const rHeading = $rankSection.querySelector('.section-heading');
+    if (rHeading) rHeading.innerHTML = `🏆 Ranking de Cultivos <span style="font-size:.82rem;font-weight:500;color:#555;margin-left:.4rem">(📍 Lat: ${parseFloat($lat.value).toFixed(2)}, Lon: ${parseFloat($lon.value).toFixed(2)})</span>`;
     $rankSection.classList.remove('hidden');
 
     // Trigger animations after paint

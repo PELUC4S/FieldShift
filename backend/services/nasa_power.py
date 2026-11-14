@@ -57,7 +57,7 @@ def obtener_clima(lat: float, lon: float, inicio: str, fin: str) -> pd.DataFrame
         "format": "JSON",
     }
     try:
-        resp = requests.get(URL, params=params, timeout=25)
+        resp = requests.get(URL, params=params, timeout=5.0)
         resp.raise_for_status()
         datos = resp.json()["properties"]["parameter"]
         df = pd.DataFrame(datos)
