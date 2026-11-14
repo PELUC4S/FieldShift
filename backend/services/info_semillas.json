@@ -43,6 +43,26 @@
       "bad_predecessors": ["maiz", "sorgo"],
       "family": "Poaceae"
     },
+    "mani": {
+      "type": "Leguminosa",
+      "water_consumption": "Medio",
+      "cycle_days_range": [140, 160],
+      "cycle_days_mid": 150,
+      "notes": "Fijadora de nitrógeno. Requiere suelos sueltos/arenosos. Precaución: la labor de arrancado en la cosecha afecta la estructura física del suelo y deja escaso rastrojo.",
+      "optimal_temp_range_C": [25, 30],
+      "absolute_min_temp_C": 10,
+      "absolute_max_temp_C": 38,
+      "min_precip_cycle_mm": 400,
+      "optimal_precip_cycle_mm": 600,
+      "sowing_months": [10, 11],
+      "harvest_months": [4, 5],
+      "frost_tolerance": "nula",
+      "heat_tolerance": "alta",
+      "soil_nitrogen_effect": "fijador",
+      "good_predecessors": ["maiz", "trigo", "sorgo", "avena", "centeno_cobertura"],
+      "bad_predecessors": ["mani", "soja", "girasol", "poroto"],
+      "family": "Fabaceae"
+    },
     "soja": {
       "type": "Leguminosa",
       "water_consumption": "Medio",
