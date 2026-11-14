@@ -1,0 +1,71 @@
+{
+  "mock": true,
+  "warning": "DATOS DE EJEMPLO. No representan ningún resultado real.",
+  "location": { "latitude": -31.42, "longitude": -64.18 },
+  "priorities_used": {
+    "water_availability": 3, "climate_risk": 3, "soil_cover": 3,
+    "diversification": 3, "nitrogen": 3
+  },
+  "strategies": [
+    {
+      "id": "current",
+      "name": "Rotación actual",
+      "is_current": true,
+      "sequence": ["[PLACEHOLDER] cultivo 1", "[PLACEHOLDER] cultivo 2"],
+      "score_total": 58,
+      "scores_by_criterion": {
+        "water_availability": { "score": 60, "basis": "calculado" },
+        "climate_risk":       { "score": 55, "basis": "calculado" },
+        "soil_cover":         { "score": 50, "basis": "bibliografia" },
+        "diversification":    { "score": 40, "basis": "supuesto" },
+        "nitrogen":           { "score": 45, "basis": "bibliografia" }
+      },
+      "favors": ["[PLACEHOLDER] factor que favorece"],
+      "risks": ["[PLACEHOLDER] riesgo identificado"],
+      "missing_info": ["Datos de suelo del lote"],
+      "assumptions": ["Umbral de helada 0 °C (supuesto sin validar)"],
+      "validate_with_professional": ["[PLACEHOLDER] punto a validar con un agrónomo"],
+      "sources": []
+    },
+    {
+      "id": "alt_1",
+      "name": "Alternativa 1",
+      "is_current": false,
+      "sequence": ["[PLACEHOLDER] cultivo A", "[PLACEHOLDER] cultivo B", "[PLACEHOLDER] cultivo C"],
+      "score_total": 71,
+      "scores_by_criterion": {
+        "water_availability": { "score": 65, "basis": "calculado" },
+        "climate_risk":       { "score": 70, "basis": "calculado" },
+        "soil_cover":         { "score": 75, "basis": "bibliografia" },
+        "diversification":    { "score": 80, "basis": "supuesto" },
+        "nitrogen":           { "score": 68, "basis": "bibliografia" }
+      },
+      "favors": ["[PLACEHOLDER] factor que favorece"],
+      "risks": ["[PLACEHOLDER] riesgo identificado"],
+      "missing_info": ["Datos de suelo del lote"],
+      "assumptions": ["Umbral de calor 35 °C (supuesto sin validar)"],
+      "validate_with_professional": ["[PLACEHOLDER] punto a validar con un agrónomo"],
+      "sources": []
+    },
+    {
+      "id": "alt_2",
+      "name": "Alternativa 2",
+      "is_current": false,
+      "sequence": ["[PLACEHOLDER] cultivo X", "[PLACEHOLDER] cultivo Y"],
+      "score_total": 64,
+      "scores_by_criterion": {
+        "water_availability": { "score": 62, "basis": "calculado" },
+        "climate_risk":       { "score": 60, "basis": "calculado" },
+        "soil_cover":         { "score": 66, "basis": "bibliografia" },
+        "diversification":    { "score": 60, "basis": "supuesto" },
+        "nitrogen":           { "score": 72, "basis": "bibliografia" }
+      },
+      "favors": ["[PLACEHOLDER] factor que favorece"],
+      "risks": ["[PLACEHOLDER] riesgo identificado"],
+      "missing_info": ["Datos de suelo del lote"],
+      "assumptions": ["Pesos por defecto iguales (sin ajustar)"],
+      "validate_with_professional": ["[PLACEHOLDER] punto a validar con un agrónomo"],
+      "sources": []
+    }
+  ]
+}
