@@ -103,6 +103,26 @@
       "bad_predecessors": ["garbanzo", "soja", "poroto", "girasol", "mani"],
       "family": "Fabaceae"
     },
+    "algodon": {
+      "type": "Industrial/Textil",
+      "water_consumption": "Alto",
+      "cycle_days_range": [150, 180],
+      "cycle_days_mid": 165,
+      "notes": "Cultivo de ciclo largo que requiere un extenso período libre de heladas y mucha radiación solar. Posee raíz pivotante profunda. Requiere clima seco durante la maduración y cosecha para no arruinar la fibra.",
+      "optimal_temp_range_C": [25, 30],
+      "absolute_min_temp_C": 15,
+      "absolute_max_temp_C": 38,
+      "min_precip_cycle_mm": 500,
+      "optimal_precip_cycle_mm": 800,
+      "sowing_months": [10, 11],
+      "harvest_months": [3, 4, 5],
+      "frost_tolerance": "nula",
+      "heat_tolerance": "alta",
+      "soil_nitrogen_effect": "consumidor_alto",
+      "good_predecessors": ["maiz", "sorgo", "trigo", "avena", "centeno_cobertura"],
+      "bad_predecessors": ["algodon", "soja", "girasol"],
+      "family": "Malvaceae"
+    },
     "sorgo": {
       "type": "Gramínea",
       "water_consumption": "Bajo",
