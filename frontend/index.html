@@ -1613,16 +1613,10 @@ footer {
     }
     const base = JSON.parse(JSON.stringify(closest || Object.values(CLIMATES_DB)[0]));
 
-    // 2. Modelo de gradiente agroclimático dinámico:
-    // Hacia el norte (latitud menos negativa) la temperatura sube ~0.65 °C por grado
-    const refLat = base.location.latitude;
-    const latDiff = lat - refLat;
-    const tempShift = latDiff * 0.65;
-
-    // Gradiente longitudinal: hacia el este más lluvia, hacia el oeste (precordillera) menos
-    const refLon = base.location.longitude;
-    const lonDiff = lon - refLon;
-    const precipFactor = Math.max(0.4, Math.min(1.6, 1.0 + (lonDiff * 0.04)));
+    // 2. Modelo agroclimático según bioma y hemisferio:
+    const isArctic = Math.abs(lat) >= 55.0;
+    const isSahara = (lat >= 15.0 && lat <= 32.0 && lon >= -18.0 && lon <= 55.0);
+    const isNorthern = lat >= 0;
 
     const newTempAvg = {};
     const newPrecipMm = {};
@@ -1631,38 +1625,84 @@ footer {
     const monthlyNormals = [];
     const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-    for (let m = 1; m <= 12; m++) {
-      const bT = base.climate_normal_monthly.temp_avg_c[m] ?? base.climate_normal_monthly.temp_avg_c[String(m)] ?? 20;
-      const bP = base.climate_normal_monthly.precip_mm[m] ?? base.climate_normal_monthly.precip_mm[String(m)] ?? 50;
+    if (isArctic) {
+      // Clima Boreal / Tundra Subártica (ej. Siberia, Norte de Canadá, Escandinavia)
+      const arcticTemps = isNorthern
+        ? [-28.4, -26.0, -18.2, -8.5, 1.2, 12.0, 16.5, 13.0, 5.5, -7.8, -20.0, -25.5]
+        : [1.2, 12.0, 16.5, 13.0, 5.5, -7.8, -20.0, -25.5, -28.4, -26.0, -18.2, -8.5];
+      const arcticPrecip = [25, 20, 22, 24, 35, 55, 68, 72, 50, 38, 30, 28];
+      const arcticFrost = isNorthern
+        ? [31, 28, 31, 28, 14, 0, 0, 0, 12, 28, 30, 31]
+        : [0, 0, 12, 28, 30, 31, 31, 28, 31, 28, 14, 0];
 
-      const adjT = Math.round((bT + tempShift) * 10) / 10;
-      const adjP = Math.round(bP * precipFactor * 10) / 10;
-      newTempAvg[m] = adjT;
-      newPrecipMm[m] = adjP;
+      for (let m = 1; m <= 12; m++) {
+        const t = arcticTemps[m - 1];
+        const p = arcticPrecip[m - 1];
+        const f = arcticFrost[m - 1];
+        newTempAvg[m] = t;
+        newPrecipMm[m] = p;
+        newFrostByMonth[m] = f;
+        newHeatByMonth[m] = 0.0;
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: t, temperature: t, precipitation: p, rainfall: p,
+          frost_days: f, heat_days: 0.0, heat_stress_days: 0.0
+        });
+      }
+    } else if (isSahara) {
+      // Clima Hiperárido Desértico
+      const saharaTemps = [18.0, 21.0, 26.0, 31.0, 35.5, 39.0, 41.2, 40.5, 36.5, 30.0, 23.5, 18.5];
+      const saharaPrecip = [4, 3, 2, 1, 1, 0, 0, 2, 4, 8, 6, 4];
+      const saharaHeat = [0, 0, 2, 8, 18, 26, 30, 29, 20, 6, 0, 0];
 
-      // Heladas invernales (meses 5 a 9) aumentan a mayor latitud sur
-      const isWinter = (m >= 5 && m <= 9);
-      let frostBase = Math.max(0, (-lat - 26) * 0.3);
-      const adjFrost = isWinter ? Math.round(frostBase * (m === 7 ? 2.5 : 1.2) * 10) / 10 : 0.0;
-      newFrostByMonth[m] = adjFrost;
+      for (let m = 1; m <= 12; m++) {
+        const t = saharaTemps[m - 1];
+        const p = saharaPrecip[m - 1];
+        const h = saharaHeat[m - 1];
+        newTempAvg[m] = t;
+        newPrecipMm[m] = p;
+        newFrostByMonth[m] = 0.0;
+        newHeatByMonth[m] = h;
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: t, temperature: t, precipitation: p, rainfall: p,
+          frost_days: 0.0, heat_days: h, heat_stress_days: h
+        });
+      }
+    } else {
+      // Gradiente agroclimático templado / de referencia
+      const refLat = base.location.latitude;
+      const latDiff = Math.max(-15, Math.min(15, lat - refLat));
+      const tempShift = latDiff * 0.65;
+      const refLon = base.location.longitude;
+      const lonDiff = Math.max(-15, Math.min(15, lon - refLon));
+      const precipFactor = Math.max(0.4, Math.min(1.6, 1.0 + (lonDiff * 0.04)));
 
-      // Estrés térmico estival (>35°C) aumenta hacia el norte
-      const isSummer = (m <= 3 || m >= 10);
-      let heatBase = Math.max(0, (lat - (-36)) * 0.35);
-      const adjHeat = isSummer ? Math.round(heatBase * 1.8 * 10) / 10 : 0.0;
-      newHeatByMonth[m] = adjHeat;
+      for (let m = 1; m <= 12; m++) {
+        const bT = base.climate_normal_monthly.temp_avg_c[m] ?? base.climate_normal_monthly.temp_avg_c[String(m)] ?? 20;
+        const bP = base.climate_normal_monthly.precip_mm[m] ?? base.climate_normal_monthly.precip_mm[String(m)] ?? 50;
 
-      monthlyNormals.push({
-        month: m,
-        month_name: monthNames[m - 1],
-        temp_mean: adjT,
-        temperature: adjT,
-        precipitation: adjP,
-        rainfall: adjP,
-        frost_days: adjFrost,
-        heat_days: adjHeat,
-        heat_stress_days: adjHeat
-      });
+        const adjT = Math.round((bT + tempShift) * 10) / 10;
+        const adjP = Math.round(bP * precipFactor * 10) / 10;
+        newTempAvg[m] = adjT;
+        newPrecipMm[m] = adjP;
+
+        const isWinter = (m >= 5 && m <= 9);
+        let frostBase = Math.max(0, (-lat - 26) * 0.3);
+        const adjFrost = isWinter ? Math.round(frostBase * (m === 7 ? 2.5 : 1.2) * 10) / 10 : 0.0;
+        newFrostByMonth[m] = adjFrost;
+
+        const isSummer = (m <= 3 || m >= 10);
+        let heatBase = Math.max(0, (lat - (-36)) * 0.35);
+        const adjHeat = isSummer ? Math.round(heatBase * 1.8 * 10) / 10 : 0.0;
+        newHeatByMonth[m] = adjHeat;
+
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: adjT, temperature: adjT, precipitation: adjP, rainfall: adjP,
+          frost_days: adjFrost, heat_days: adjHeat, heat_stress_days: adjHeat
+        });
+      }
     }
 
     base.location = { latitude: lat, longitude: lon, is_dynamic: true };
@@ -2551,9 +2591,11 @@ footer {
         rotPayload.first_crop_key = firstCrop;
       }
 
-      // Timeout corto (2.5s) para detectar si no hay servidor backend (ej. GitHub Pages estático)
+      // Timeout adaptativo: 15s si está conectado a localhost/127.0.0.1 (permite a las APIs reales de NASA POWER y SoilGrids responder), o 3.5s si es GitHub Pages estático
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const timeoutMs = isLocalhost ? 15000 : 3500;
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 2500);
+      const tid = setTimeout(() => ctrl.abort(), timeoutMs);
 
       const prevCropsParam = previousCrops.length ? `&previous_crops=${encodeURIComponent(previousCrops.join(','))}` : '';
       const [rankingRes, rotationRes, climateRes, satRes] = await Promise.all([

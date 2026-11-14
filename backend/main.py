@@ -21,14 +21,14 @@ try:
     from analysis.indicators import calcular_indicadores, ensure_monthly_normals
     from engine.crop_ranker import rank_crops, compute_crop_score, _load_crops
     from engine.rotation import build_rotation, suggest_next_crop
-    from services.nasa_power import obtener_clima
+    from services.nasa_power import obtener_clima, _generar_clima_sintetico
     from services.nasa_harvester import get_satellite_readings, build_field_analytics
     from services.soilgrids_service import query_soilgrids
 except ImportError:
     from backend.analysis.indicators import calcular_indicadores, ensure_monthly_normals
     from backend.engine.crop_ranker import rank_crops, compute_crop_score, _load_crops
     from backend.engine.rotation import build_rotation, suggest_next_crop
-    from backend.services.nasa_power import obtener_clima
+    from backend.services.nasa_power import obtener_clima, _generar_clima_sintetico
     from backend.services.nasa_harvester import get_satellite_readings, build_field_analytics
     from backend.services.soilgrids_service import query_soilgrids
 
@@ -92,21 +92,39 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
         return resultado
     except Exception as e:
         logger.error(f"Fallo al procesar clima de NASA POWER: {e}")
-        # Buscar caché más cercano como salvaguarda
+        # 1. Buscar caché geográficamente más cercano (< 300 km)
         caches = list(CACHE_DIR.glob("clima_*.json"))
-        if caches:
-            logger.info("Usando caché histórico más próximo como contingencia...")
-            fb = json.loads(caches[0].read_text(encoding="utf-8"))
+        closest_cache = None
+        min_dist_sq = float("inf")
+        for c in caches:
+            try:
+                parts = c.stem.split("_")
+                c_lat, c_lon = float(parts[1]), float(parts[2])
+                dist = (lat_r - c_lat) ** 2 + (lon_r - c_lon) ** 2
+                if dist < min_dist_sq:
+                    min_dist_sq = dist
+                    closest_cache = c
+            except Exception:
+                continue
+
+        if closest_cache and min_dist_sq < 9.0:
+            logger.info(f"Usando caché histórico geográficamente próximo ({closest_cache.name}) como contingencia...")
+            fb = json.loads(closest_cache.read_text(encoding="utf-8"))
             fb["location"] = {"latitude": lat, "longitude": lon}
             fb["fallback"] = True
             fb = ensure_monthly_normals(fb)
             fb["soil_profile"] = query_soilgrids(lat_r, lon_r)
             fb["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, fb)
             return fb
-        raise HTTPException(
-            status_code=502,
-            detail=f"No se pudieron obtener datos climáticos para ({lat}, {lon}): {e}",
-        )
+
+        # 2. Si no hay caché cercano, generar serie agroclimática calibrada para estas coordenadas
+        logger.info(f"Generando modelo agroclimático calibrado de contingencia para ({lat_r}, {lon_r})...")
+        df_fb = _generar_clima_sintetico(lat_r, lon_r, INICIO, FIN)
+        fb_res = calcular_indicadores(df_fb, lat_r, lon_r, INICIO, FIN)
+        fb_res["fallback"] = True
+        fb_res["soil_profile"] = query_soilgrids(lat_r, lon_r)
+        fb_res["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, fb_res)
+        return fb_res
 
 
 # ─── Modelos Pydantic ───────────────────────────────────────────────────────

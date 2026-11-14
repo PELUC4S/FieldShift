@@ -8,19 +8,40 @@ URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
 
 def _generar_clima_sintetico(lat: float, lon: float, inicio: str, fin: str) -> pd.DataFrame:
     """
-    Genera un DataFrame histórico climatológico de respaldo fundamentado en
-    la latitud y longitud representativas de la región agrícola argentina (Pampa / NOA).
-    Se activa únicamente si la API de NASA POWER se encuentra inaccesible.
+    Genera un DataFrame histórico climatológico de respaldo calibrado por bioma y hemisferio.
+    Se activa únicamente si la API de NASA POWER se encuentra inaccesible o demora.
     """
     fechas = pd.date_range(start=inicio, end=fin, freq="D")
     dias_del_anio = fechas.dayofyear.values
     
-    # Modelo térmico estacional sinusoidal invertido para hemisferio sur (julio frío, enero cálido)
-    t_media_base = 18.0 - (abs(lat) - 25.0) * 0.45
-    amplitud_termica = 7.5
-    temp_media = t_media_base - amplitud_termica * np.cos(2 * np.pi * (dias_del_anio - 15) / 365)
+    is_northern = (lat >= 0)
+    is_arctic = (abs(lat) >= 55.0)
+
+    if is_arctic:
+        t_base = -7.5
+        amplitud = 22.0
+        prob_lluvia_base = 0.18
+    elif abs(lat) <= 15.0:
+        t_base = 26.5
+        amplitud = 2.5
+        prob_lluvia_base = 0.40
+    elif (lat >= 15.0 and lat <= 32.0 and lon >= -18.0 and lon <= 55.0):
+        # Desierto del Sahara
+        t_base = 29.0
+        amplitud = 12.0
+        prob_lluvia_base = 0.03
+    else:
+        # Zona templada
+        t_base = 18.0 - (abs(lat) - 25.0) * 0.45
+        amplitud = 7.5
+        prob_lluvia_base = 0.22
+
+    # Hemisferio norte: pico cálido en julio (día 196)
+    # Hemisferio sur: pico cálido en enero (día 15)
+    peak_day = 196 if is_northern else 15
+    temp_media = t_base + amplitud * np.cos(2 * np.pi * (dias_del_anio - peak_day) / 365)
     
-    # Variabilidad aleatoria diaria
+    # Variabilidad aleatoria diaria determinista
     np.random.seed(int(abs(lat * 100) + abs(lon * 100)) % 10000)
     ruido_t = np.random.normal(0, 2.5, len(fechas))
     temp_media = temp_media + ruido_t
@@ -28,10 +49,10 @@ def _generar_clima_sintetico(lat: float, lon: float, inicio: str, fin: str) -> p
     temp_min = temp_media - np.random.uniform(5.0, 9.0, len(fechas))
     temp_max = temp_media + np.random.uniform(6.0, 11.0, len(fechas))
     
-    # Precipitaciones: régimen estacional (más en verano/primavera, seco en invierno)
-    prob_lluvia = 0.22 + 0.12 * np.cos(2 * np.pi * (dias_del_anio - 15) / 365)
+    # Precipitaciones estacionales
+    prob_lluvia = np.clip(prob_lluvia_base + 0.10 * np.cos(2 * np.pi * (dias_del_anio - peak_day) / 365), 0.01, 0.70)
     llueve = np.random.rand(len(fechas)) < prob_lluvia
-    monto_lluvia = np.random.exponential(14.0, len(fechas)) * llueve
+    monto_lluvia = np.random.exponential(12.0, len(fechas)) * llueve
     monto_lluvia = np.round(monto_lluvia, 1)
 
     df = pd.DataFrame({
