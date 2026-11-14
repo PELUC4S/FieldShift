@@ -1,0 +1,1928 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FieldShift — Predicción de Rotación de Cultivos</title>
+<style>
+/* ═══════════════════════════════════════════
+   CSS RESET & VARIABLES
+   ═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --dark-green: #1a472a;
+  --leaf-green: #2d5a27;
+  --mid-green: #3a7d32;
+  --light-green: #4a9e3f;
+  --gold: #c4a35a;
+  --earth-brown: #5c4033;
+  --cream: #f5f0e1;
+  --white: #ffffff;
+  --red: #d94040;
+  --yellow: #e6a817;
+  --blue-frost: #5b9bd5;
+  --bg: #f0ebe0;
+  --card-shadow: 0 2px 12px rgba(0,0,0,.08);
+  --card-shadow-hover: 0 6px 24px rgba(0,0,0,.14);
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --transition: .3s cubic-bezier(.4,0,.2,1);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: #2c2c2c;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+/* ═══════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════ */
+header {
+  background: linear-gradient(135deg, var(--dark-green) 0%, var(--leaf-green) 60%, var(--mid-green) 100%);
+  color: var(--white);
+  padding: 1.5rem 2rem;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 16px rgba(0,0,0,.25);
+}
+
+header .logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+}
+
+header .logo-icon {
+  width: 44px; height: 44px;
+}
+
+header h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+header .tagline {
+  font-size: .95rem;
+  opacity: .85;
+  margin-top: .25rem;
+  font-weight: 300;
+}
+
+/* ═══════════════════════════════════════════
+   MAIN LAYOUT
+   ═══════════════════════════════════════════ */
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  main { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════
+   SIDEBAR / INPUT FORM
+   ═══════════════════════════════════════════ */
+.sidebar {
+  position: sticky;
+  top: 100px;
+}
+
+.panel {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.panel-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--dark-green);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.form-group {
+  margin-bottom: 1.15rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: .82rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: .3rem;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.form-group input[type="number"],
+.form-group select {
+  width: 100%;
+  padding: .6rem .75rem;
+  border: 1.5px solid #d5d0c5;
+  border-radius: 8px;
+  font-size: .95rem;
+  font-family: var(--font);
+  background: var(--cream);
+  color: #333;
+  transition: border var(--transition), box-shadow var(--transition);
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--leaf-green);
+  box-shadow: 0 0 0 3px rgba(45,90,39,.15);
+}
+
+.coord-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .6rem;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.range-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--leaf-green);
+  height: 6px;
+}
+
+.range-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--leaf-green);
+  min-width: 30px;
+  text-align: center;
+}
+
+.btn-analyze {
+  width: 100%;
+  padding: .85rem 1rem;
+  background: linear-gradient(135deg, var(--leaf-green), var(--mid-green));
+  color: var(--white);
+  border: none;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition), filter var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  letter-spacing: .3px;
+  box-shadow: 0 4px 14px rgba(45,90,39,.35);
+}
+
+.btn-analyze:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45,90,39,.45);
+  filter: brightness(1.06);
+}
+
+.btn-analyze:active {
+  transform: translateY(0);
+}
+
+.btn-analyze:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-analyze .spinner {
+  display: none;
+  width: 20px; height: 20px;
+  border: 3px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+.btn-analyze.loading .spinner { display: inline-block; }
+.btn-analyze.loading .btn-text { display: none; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Map placeholder */
+.map-container {
+  width: 100%;
+  height: 160px;
+  background: var(--cream);
+  border-radius: 8px;
+  border: 1.5px solid #d5d0c5;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.map-container .map-placeholder {
+  width: 100%; height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: .3rem;
+  color: #999;
+  font-size: .85rem;
+  cursor: crosshair;
+}
+
+.map-container .map-placeholder .pin { font-size: 2rem; }
+
+.map-container canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ═══════════════════════════════════════════
+   RESULTS AREA
+   ═══════════════════════════════════════════ */
+.results-area {
+  min-width: 0;
+}
+
+.section-heading {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--dark-green);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+/* Placeholder */
+.placeholder-message {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #aaa;
+}
+
+.placeholder-message .big-icon { font-size: 4rem; margin-bottom: 1rem; }
+.placeholder-message p { font-size: 1.1rem; }
+
+/* ─── Error ─── */
+.error-banner {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: var(--red);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  display: none;
+  align-items: center;
+  gap: .5rem;
+  font-size: .95rem;
+}
+
+.error-banner.visible { display: flex; }
+
+/* ─── Loading skeleton ─── */
+.skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.skeleton-card {
+  height: 180px;
+  border-radius: var(--radius);
+  background: linear-gradient(110deg, #eee 30%, #f5f5f5 50%, #eee 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ═══════════════════════════════════════════
+   RANKING CARDS
+   ═══════════════════════════════════════════ */
+.ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.crop-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 1.25rem;
+  transition: transform var(--transition), box-shadow var(--transition);
+  opacity: 0;
+  transform: translateY(20px);
+  animation: cardIn .5s ease forwards;
+  position: relative;
+  overflow: hidden;
+}
+
+.crop-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px; height: 100%;
+}
+
+.crop-card.score-high::before { background: var(--mid-green); }
+.crop-card.score-mid::before  { background: var(--yellow); }
+.crop-card.score-low::before  { background: var(--red); }
+
+.crop-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--card-shadow-hover);
+}
+
+@keyframes cardIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .8rem;
+}
+
+.card-crop-name {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.card-crop-name .emoji { font-size: 1.5rem; }
+
+.card-crop-name .name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--dark-green);
+  text-transform: capitalize;
+}
+
+/* Circular progress */
+.circle-score {
+  position: relative;
+  width: 56px; height: 56px;
+  flex-shrink: 0;
+}
+
+.circle-score svg {
+  width: 56px; height: 56px;
+  transform: rotate(-90deg);
+}
+
+.circle-score .bg { stroke: #e8e4da; }
+
+.circle-score .fg {
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s ease;
+}
+
+.circle-score .score-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  font-size: .7rem;
+  font-weight: 600;
+  padding: .2rem .55rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.badge-graminea {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.badge-leguminosa {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.badge-other {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.card-badges {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+  margin-bottom: .75rem;
+}
+
+.water-indicator {
+  font-size: .75rem;
+  color: #5b9bd5;
+  letter-spacing: 1px;
+}
+
+/* Score breakdown bars */
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  margin-top: .6rem;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .75rem;
+}
+
+.bar-row .bar-icon { width: 20px; text-align: center; flex-shrink: 0; }
+
+.bar-row .bar-label {
+  width: 70px;
+  flex-shrink: 0;
+  color: #777;
+  font-weight: 500;
+}
+
+.bar-track {
+  flex: 1;
+  height: 6px;
+  background: #ece8df;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1s ease;
+  width: 0;
+}
+
+.bar-fill.high { background: var(--mid-green); }
+.bar-fill.mid  { background: var(--yellow); }
+.bar-fill.low  { background: var(--red); }
+
+.bar-row .bar-val {
+  width: 28px;
+  text-align: right;
+  font-weight: 600;
+  font-size: .72rem;
+  color: #555;
+}
+
+/* ═══════════════════════════════════════════
+   ROTATION TIMELINE
+   ═══════════════════════════════════════════ */
+.rotation-section { margin-bottom: 2.5rem; }
+
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 1rem .5rem 1.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) var(--cream);
+}
+
+.timeline::-webkit-scrollbar { height: 6px; }
+.timeline::-webkit-scrollbar-track { background: var(--cream); border-radius: 3px; }
+.timeline::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 3px; }
+
+.tl-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 1rem 1.15rem;
+  min-width: 170px;
+  max-width: 200px;
+  flex-shrink: 0;
+  text-align: center;
+  position: relative;
+  border-top: 4px solid #ccc;
+  opacity: 0;
+  transform: scale(.9);
+  animation: tlIn .45s ease forwards;
+}
+
+.tl-card.score-high { border-top-color: var(--mid-green); }
+.tl-card.score-mid  { border-top-color: var(--yellow); }
+.tl-card.score-low  { border-top-color: var(--red); }
+
+@keyframes tlIn {
+  to { opacity: 1; transform: scale(1); }
+}
+
+.tl-card .cycle-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #999;
+  letter-spacing: .5px;
+  margin-bottom: .4rem;
+}
+
+.tl-card .crop-emoji { font-size: 2rem; margin-bottom: .3rem; }
+.tl-card .crop-name  { font-weight: 700; color: var(--dark-green); font-size: .95rem; text-transform: capitalize; }
+
+.tl-card .period {
+  font-size: .78rem;
+  color: #777;
+  margin: .35rem 0;
+}
+
+.tl-card .tl-score {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.tl-card .bonus-tag {
+  font-size: .72rem;
+  font-weight: 600;
+  margin-top: .3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .15rem;
+  padding: .15rem .45rem;
+  border-radius: 12px;
+}
+
+.bonus-tag.positive { background: #e8f5e9; color: #2e7d32; }
+.bonus-tag.negative { background: #ffebee; color: #c62828; }
+
+.tl-card .tl-succ-badge {
+  font-size: .68rem;
+  color: #334155;
+  background: #f1f5f9;
+  border-left: 3px solid var(--mid-green);
+  border-radius: 4px;
+  padding: .35rem .45rem;
+  margin-top: .5rem;
+  text-align: left;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.btn-select-crop {
+  width: 100%;
+  margin-top: .75rem;
+  padding: .42rem .6rem;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--mid-green);
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-select-crop:hover {
+  background: var(--mid-green);
+  color: #fff;
+  border-color: var(--mid-green);
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: .3rem;
+  margin-bottom: .65rem;
+}
+
+.chip {
+  background: var(--cream);
+  border: 1px solid #d5d0c5;
+  border-radius: 14px;
+  padding: .22rem .55rem;
+  font-size: .72rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.chip:hover {
+  background: #e8f5e9;
+  border-color: var(--mid-green);
+  color: var(--dark-green);
+}
+
+.chip.active {
+  background: var(--leaf-green);
+  border-color: var(--leaf-green);
+  color: #fff;
+}
+
+/* Arrow between timeline cards */
+.tl-arrow {
+  flex-shrink: 0;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  font-size: 1.3rem;
+  opacity: 0;
+  animation: fadeIn .4s ease forwards;
+}
+
+@keyframes fadeIn { to { opacity: 1; } }
+
+/* Rotation summary */
+.rotation-summary {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 1.25rem 1.5rem;
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .rotation-summary { grid-template-columns: 1fr; }
+}
+
+.rot-total-score {
+  text-align: center;
+  padding: .5rem 1.5rem;
+  border-right: 1px solid #eee;
+}
+
+@media (max-width: 700px) {
+  .rot-total-score { border-right: none; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
+}
+
+.rot-total-score .big-num {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rot-total-score .sub { font-size: .8rem; color: #999; margin-top: .25rem; }
+
+.rot-list { list-style: none; }
+.rot-list li {
+  font-size: .88rem;
+  padding: .25rem 0;
+  display: flex;
+  align-items: baseline;
+  gap: .3rem;
+}
+
+.rot-list-title {
+  font-size: .82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin-bottom: .5rem;
+}
+
+.rot-list-title.benefits { color: var(--mid-green); }
+.rot-list-title.warnings { color: var(--red); }
+
+/* ═══════════════════════════════════════════
+   CLIMATE PANEL
+   ═══════════════════════════════════════════ */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 1rem 1.25rem;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  margin-bottom: .5rem;
+  transition: background var(--transition);
+}
+
+.collapsible-header:hover { background: #fafaf5; }
+
+.collapsible-header .chevron {
+  transition: transform var(--transition);
+  font-size: 1.2rem;
+  color: #999;
+}
+
+.collapsible-header.open .chevron { transform: rotate(180deg); }
+
+.collapsible-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .45s ease;
+}
+
+.collapsible-body.open {
+  max-height: 1200px;
+}
+
+.climate-content {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 1.5rem;
+}
+
+.chart-section {
+  margin-bottom: 1.5rem;
+}
+
+.chart-section:last-child { margin-bottom: 0; }
+
+.chart-label {
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--dark-green);
+  margin-bottom: .6rem;
+}
+
+/* CSS bar chart */
+.css-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 130px;
+  padding-top: 1rem;
+  position: relative;
+}
+
+.css-chart .bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.css-chart .bar {
+  width: 100%;
+  max-width: 36px;
+  border-radius: 4px 4px 0 0;
+  transition: height .8s ease;
+  position: relative;
+  min-height: 2px;
+}
+
+.css-chart .bar-col .val {
+  font-size: .62rem;
+  color: #999;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.css-chart .bar-col .mo {
+  font-size: .62rem;
+  color: #777;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.bar.temp { background: linear-gradient(to top, #ff9800, #f44336); }
+.bar.rain { background: linear-gradient(to top, #42a5f5, #1565c0); }
+.bar.frost-highlight { box-shadow: inset 0 0 0 2px var(--blue-frost); }
+.bar.heat-highlight  { box-shadow: inset 0 0 0 2px var(--red); }
+
+.chart-legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: .6rem;
+  font-size: .72rem;
+  color: #888;
+}
+
+.chart-legend span {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* ═══════════════════════════════════════════
+   UTILITY
+   ═══════════════════════════════════════════ */
+.hidden { display: none !important; }
+
+.mt-1 { margin-top: 1rem; }
+.mt-2 { margin-top: 2rem; }
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 2rem;
+  color: #bbb;
+  font-size: .78rem;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header>
+  <div class="logo">
+    <svg class="logo-icon" viewBox="0 0 48 48" fill="none">
+      <path d="M24 4C24 4 10 14 10 28c0 7.7 6.3 14 14 14s14-6.3 14-14C38 14 24 4 24 4z" fill="#4caf50" opacity=".7"/>
+      <path d="M24 12c0 0-8 7-8 17 0 4.4 3.6 8 8 8s8-3.6 8-8c0-10-8-17-8-17z" fill="#81c784"/>
+      <path d="M24 44V12" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+      <path d="M24 22c-4-2-7 1-9 4" stroke="#2e7d32" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+      <path d="M24 28c4-2 6 1 8 3" stroke="#2e7d32" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    </svg>
+    <h1>FieldShift</h1>
+  </div>
+  <p class="tagline">Predicción inteligente de rotación de cultivos</p>
+</header>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<main>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="panel">
+      <div class="panel-title">📍 Configuración del Análisis</div>
+
+      <!-- Map placeholder -->
+      <div class="map-container" id="mapContainer">
+        <div class="map-placeholder" id="mapPlaceholder">
+          <span class="pin">📌</span>
+          <span>Mapa de ubicación</span>
+          <span style="font-size:.72rem;color:#bbb">Haz clic para marcar posición</span>
+        </div>
+        <canvas id="mapCanvas" class="hidden"></canvas>
+      </div>
+
+      <!-- Presets -->
+      <div class="form-group">
+        <label>Región Agrícola de Referencia</label>
+        <div class="preset-chips" id="presetChips">
+          <button type="button" class="chip active" data-lat="-31.42" data-lon="-64.18">Córdoba (Centro)</button>
+          <button type="button" class="chip" data-lat="-33.89" data-lon="-60.57">Pergamino (Núcleo)</button>
+          <button type="button" class="chip" data-lat="-27.80" data-lon="-65.80">Singuil (Catamarca/NOA)</button>
+          <button type="button" class="chip" data-lat="-37.85" data-lon="-58.26">Balcarce (Sur)</button>
+        </div>
+      </div>
+
+      <!-- Coordinates -->
+      <div class="form-group">
+        <label>Coordenadas (Lat / Lon)</label>
+        <div class="coord-row">
+          <div>
+            <input type="number" id="inputLat" value="-31.42" step="0.01" placeholder="Latitud">
+          </div>
+          <div>
+            <input type="number" id="inputLon" value="-64.18" step="0.01" placeholder="Longitud">
+          </div>
+        </div>
+      </div>
+
+      <!-- Planting month -->
+      <div class="form-group">
+        <label>Mes de siembra</label>
+        <select id="inputMonth">
+          <option value="1">Enero</option>
+          <option value="2">Febrero</option>
+          <option value="3">Marzo</option>
+          <option value="4">Abril</option>
+          <option value="5">Mayo</option>
+          <option value="6">Junio</option>
+          <option value="7">Julio</option>
+          <option value="8">Agosto</option>
+          <option value="9">Septiembre</option>
+          <option value="10" selected>Octubre</option>
+          <option value="11">Noviembre</option>
+          <option value="12">Diciembre</option>
+        </select>
+      </div>
+
+      <!-- Cycle duration -->
+      <div class="form-group">
+        <label>Duración del ciclo (meses)</label>
+        <div class="range-row">
+          <input type="range" id="inputCycle" min="3" max="6" value="4">
+          <span class="range-val" id="cycleVal">4</span>
+        </div>
+      </div>
+
+      <!-- Rotation cycles -->
+      <div class="form-group">
+        <label>Ciclos de rotación</label>
+        <div class="range-row">
+          <input type="range" id="inputCycles" min="2" max="6" value="3">
+          <span class="range-val" id="cyclesVal">3</span>
+        </div>
+      </div>
+
+      <!-- Analyze button -->
+      <button class="btn-analyze" id="btnAnalyze">
+        <span class="spinner"></span>
+        <span class="btn-text">🔍 Analizar Rotación</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- RESULTS -->
+  <section class="results-area" id="resultsArea">
+    <!-- Error banner -->
+    <div class="error-banner" id="errorBanner">
+      <span>⚠️</span>
+      <span id="errorText">Error de conexión</span>
+    </div>
+
+    <!-- Placeholder -->
+    <div class="placeholder-message" id="placeholder">
+      <div class="big-icon">🌾</div>
+      <p>Configurá los parámetros y presioná <strong>Analizar</strong> para ver las recomendaciones de cultivos.</p>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div class="hidden" id="loadingSkeleton">
+      <div class="section-heading">⏳ Analizando datos climáticos...</div>
+      <div class="skeleton-row">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </div>
+
+    <!-- Ranking results -->
+    <div class="hidden" id="rankingSection">
+      <div class="section-heading">🏆 Ranking de Cultivos</div>
+      <div class="ranking-grid" id="rankingGrid"></div>
+    </div>
+
+    <!-- Rotation results -->
+    <div class="hidden rotation-section" id="rotationSection">
+      <div class="section-heading">🔄 Secuencia de Rotación Recomendada</div>
+      <div class="timeline" id="timeline"></div>
+      <div class="rotation-summary hidden" id="rotationSummary"></div>
+    </div>
+
+    <!-- Climate panel -->
+    <div class="hidden mt-2" id="climateSection">
+      <div class="collapsible-header" id="climateToggle">
+        <span class="section-heading" style="margin:0">🌡️ Contexto Climático</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="collapsible-body" id="climateBody">
+        <div class="climate-content" id="climateContent"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  FieldShift © 2026 — Motor de predicción agronómica basado en datos climáticos NASA POWER
+</footer>
+
+<!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ──── Constants ────
+  const API = (window.location.protocol.startsWith('http') && window.location.origin)
+    ? window.location.origin
+    : 'http://localhost:8088';
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const CROP_EMOJI = {
+    maiz: '🌽', soja: '🫘', sorgo: '🌾', girasol: '🌻', trigo: '🌾',
+    cebada: '🌾', arveja: '🫛', centeno_cobertura: '🌿', vicia: '🌱',
+    colza: '🌼', avena: '🌾', papa: '🥔'
+  };
+
+  // ──── DOM refs ────
+  const $lat        = document.getElementById('inputLat');
+  const $lon        = document.getElementById('inputLon');
+  const $month      = document.getElementById('inputMonth');
+  const $cycle      = document.getElementById('inputCycle');
+  const $cycleVal   = document.getElementById('cycleVal');
+  const $cycles     = document.getElementById('inputCycles');
+  const $cyclesVal  = document.getElementById('cyclesVal');
+  const $btn        = document.getElementById('btnAnalyze');
+  const $error      = document.getElementById('errorBanner');
+  const $errorText  = document.getElementById('errorText');
+  const $placeholder    = document.getElementById('placeholder');
+  const $loading        = document.getElementById('loadingSkeleton');
+  const $rankSection    = document.getElementById('rankingSection');
+  const $rankGrid       = document.getElementById('rankingGrid');
+  const $rotSection     = document.getElementById('rotationSection');
+  const $timeline       = document.getElementById('timeline');
+  const $rotSummary     = document.getElementById('rotationSummary');
+  const $climateSection = document.getElementById('climateSection');
+  const $climateToggle  = document.getElementById('climateToggle');
+  const $climateBody    = document.getElementById('climateBody');
+  const $climateContent = document.getElementById('climateContent');
+
+  // ──── Range slider live values ────
+  $cycle.addEventListener('input', () => $cycleVal.textContent = $cycle.value);
+  $cycles.addEventListener('input', () => $cyclesVal.textContent = $cycles.value);
+
+  // ──── Climate collapse toggle ────
+  $climateToggle.addEventListener('click', () => {
+    $climateToggle.classList.toggle('open');
+    $climateBody.classList.toggle('open');
+  });
+
+  // ──── Simple map canvas ────
+  initMap();
+
+  function initMap() {
+    const container = document.getElementById('mapContainer');
+    const canvas = document.getElementById('mapCanvas');
+    const placeholder = document.getElementById('mapPlaceholder');
+    const ctx = canvas.getContext('2d');
+
+    // Draw a simple grid map representation
+    function drawMap() {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      const w = canvas.width, h = canvas.height;
+
+      // Background
+      ctx.fillStyle = '#e8f5e9';
+      ctx.fillRect(0, 0, w, h);
+
+      // Grid lines
+      ctx.strokeStyle = '#c8e6c9';
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < w; i += 20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
+      for (let i = 0; i < h; i += 20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke(); }
+
+      // Argentina rough shape (simplified polygon)
+      ctx.fillStyle = '#a5d6a7';
+      ctx.beginPath();
+      // Map lat -22 to -55, lon -53 to -73 onto canvas
+      const points = [
+        [-53, -22], [-58, -22], [-66, -22], [-69, -27], [-68, -32],
+        [-70, -35], [-71, -42], [-69, -52], [-65, -55], [-63, -52],
+        [-58, -40], [-57, -34], [-58, -28], [-53, -22]
+      ];
+      points.forEach(([lon, lat], i) => {
+        const x = ((lon - (-73)) / 20) * w;
+        const y = ((lat - (-22)) / (-33)) * h;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fill();
+
+      // Pin for current lat/lon
+      const lat = parseFloat($lat.value) || -31.42;
+      const lon = parseFloat($lon.value) || -64.18;
+      const px = ((lon - (-73)) / 20) * w;
+      const py = ((lat - (-22)) / (-33)) * h;
+
+      // Pin shadow
+      ctx.beginPath();
+      ctx.ellipse(px, py + 6, 5, 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,.2)';
+      ctx.fill();
+
+      // Pin circle
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#d32f2f';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Coord label
+      ctx.fillStyle = '#333';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(`${lat.toFixed(1)}, ${lon.toFixed(1)}`, px + 10, py + 4);
+    }
+
+    placeholder.classList.add('hidden');
+    canvas.classList.remove('hidden');
+    drawMap();
+
+    // Click to update coords
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const lon = (x / canvas.width) * 20 + (-73);
+      const lat = (y / canvas.height) * (-33) + (-22);
+      $lat.value = lat.toFixed(2);
+      $lon.value = lon.toFixed(2);
+      drawMap();
+    });
+
+    // Redraw on input change
+    $lat.addEventListener('change', drawMap);
+    $lon.addEventListener('change', drawMap);
+
+    // Preset chips interaction
+    document.querySelectorAll('.preset-chips .chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.preset-chips .chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        $lat.value = chip.dataset.lat;
+        $lon.value = chip.dataset.lon;
+        drawMap();
+      });
+    });
+
+    window.addEventListener('resize', drawMap);
+  }
+
+
+  // ──── MOTOR AGROCLIMÁTICO STANDALONE EMBEBIDO (GitHub Pages / Modo Autónomo) ────
+  const CROPS_DB = {"maiz": {"type": "Gramínea", "water_consumption": "Alto", "cycle_days_range": [120, 150], "cycle_days_mid": 135, "notes": "Alta demanda hídrica en floración; sensible al déficit estival. Cultivo de verano por excelencia.", "optimal_temp_range_C": [20, 30], "absolute_min_temp_C": 5, "absolute_max_temp_C": 42, "min_precip_cycle_mm": 350, "optimal_precip_cycle_mm": 550, "sowing_months": [9, 10, 11, 12], "harvest_months": [2, 3, 4], "frost_tolerance": "nula", "heat_tolerance": "media", "soil_nitrogen_effect": "consumidor_alto", "good_predecessors": ["soja", "arveja", "vicia", "trigo"], "bad_predecessors": ["maiz", "sorgo"], "family": "Poaceae"}, "soja": {"type": "Leguminosa", "water_consumption": "Medio", "cycle_days_range": [120, 150], "cycle_days_mid": 135, "notes": "Fijadora de nitrógeno; el ciclo depende fuertemente del grupo de madurez.", "optimal_temp_range_C": [20, 30], "absolute_min_temp_C": 4, "absolute_max_temp_C": 40, "min_precip_cycle_mm": 300, "optimal_precip_cycle_mm": 500, "sowing_months": [10, 11, 12], "harvest_months": [3, 4, 5], "frost_tolerance": "nula", "heat_tolerance": "media", "soil_nitrogen_effect": "fijador", "good_predecessors": ["maiz", "trigo", "sorgo", "cebada", "avena"], "bad_predecessors": ["soja", "girasol"], "family": "Fabaceae"}, "sorgo": {"type": "Gramínea", "water_consumption": "Bajo", "cycle_days_range": [100, 130], "cycle_days_mid": 115, "notes": "Tolerante a sequía respecto al maíz; buena opción con lluvia limitada.", "optimal_temp_range_C": [22, 33], "absolute_min_temp_C": 7, "absolute_max_temp_C": 45, "min_precip_cycle_mm": 250, "optimal_precip_cycle_mm": 400, "sowing_months": [10, 11, 12], "harvest_months": [3, 4], "frost_tolerance": "nula", "heat_tolerance": "alta", "soil_nitrogen_effect": "consumidor_medio", "good_predecessors": ["soja", "arveja", "vicia", "trigo"], "bad_predecessors": ["sorgo", "maiz"], "family": "Poaceae"}, "girasol": {"type": "Compuesta", "water_consumption": "Medio", "cycle_days_range": [110, 140], "cycle_days_mid": 125, "notes": "Dicotiledónea (Asteraceae), no fija nitrógeno. Raíces profundas aprovechan humedad del subsuelo.", "optimal_temp_range_C": [18, 28], "absolute_min_temp_C": 3, "absolute_max_temp_C": 38, "min_precip_cycle_mm": 280, "optimal_precip_cycle_mm": 450, "sowing_months": [10, 11], "harvest_months": [2, 3], "frost_tolerance": "baja", "heat_tolerance": "media", "soil_nitrogen_effect": "consumidor_medio", "good_predecessors": ["trigo", "cebada", "soja", "arveja"], "bad_predecessors": ["girasol", "colza"], "family": "Asteraceae"}, "centeno_cobertura": {"type": "Gramínea de invierno", "water_consumption": "Bajo", "cycle_days_range": [120, 180], "cycle_days_mid": 150, "notes": "Cultivo de cobertura invernal; se siembra en otoño y se seca/rola antes del cultivo de verano. Protege el suelo y aporta rastrojo.", "optimal_temp_range_C": [5, 18], "absolute_min_temp_C": -15, "absolute_max_temp_C": 30, "min_precip_cycle_mm": 150, "optimal_precip_cycle_mm": 300, "sowing_months": [3, 4, 5], "harvest_months": [8, 9, 10], "frost_tolerance": "alta", "heat_tolerance": "baja", "soil_nitrogen_effect": "neutral", "good_predecessors": ["soja", "maiz", "sorgo", "girasol"], "bad_predecessors": ["trigo", "cebada"], "family": "Poaceae"}, "trigo": {"type": "Gramínea de invierno", "water_consumption": "Medio", "cycle_days_range": [130, 170], "cycle_days_mid": 150, "notes": "Principal cultivo invernal de la pampa. Doble propósito: grano y cobertura. Siembra mayo-julio, cosecha noviembre-diciembre.", "optimal_temp_range_C": [10, 22], "absolute_min_temp_C": -10, "absolute_max_temp_C": 35, "min_precip_cycle_mm": 250, "optimal_precip_cycle_mm": 400, "sowing_months": [5, 6, 7], "harvest_months": [11, 12], "frost_tolerance": "alta", "heat_tolerance": "baja", "soil_nitrogen_effect": "consumidor_alto", "good_predecessors": ["soja", "arveja", "vicia", "girasol"], "bad_predecessors": ["trigo", "cebada"], "family": "Poaceae"}, "cebada": {"type": "Gramínea de invierno", "water_consumption": "Medio", "cycle_days_range": [110, 145], "cycle_days_mid": 128, "notes": "Ciclo más corto que el trigo. Ideal para doble cultivo cebada-soja. Sensible a exceso hídrico en madurez.", "optimal_temp_range_C": [8, 20], "absolute_min_temp_C": -8, "absolute_max_temp_C": 33, "min_precip_cycle_mm": 220, "optimal_precip_cycle_mm": 350, "sowing_months": [5, 6, 7], "harvest_months": [10, 11, 12], "frost_tolerance": "alta", "heat_tolerance": "baja", "soil_nitrogen_effect": "consumidor_medio", "good_predecessors": ["soja", "arveja", "vicia", "girasol"], "bad_predecessors": ["trigo", "cebada", "avena"], "family": "Poaceae"}, "arveja": {"type": "Leguminosa de invierno", "water_consumption": "Bajo", "cycle_days_range": [120, 160], "cycle_days_mid": 140, "notes": "Leguminosa invernal; fija nitrógeno y es excelente antecesor para cultivos de verano. Sensible a encharcamiento.", "optimal_temp_range_C": [8, 20], "absolute_min_temp_C": -5, "absolute_max_temp_C": 30, "min_precip_cycle_mm": 200, "optimal_precip_cycle_mm": 350, "sowing_months": [5, 6, 7], "harvest_months": [10, 11], "frost_tolerance": "media", "heat_tolerance": "baja", "soil_nitrogen_effect": "fijador", "good_predecessors": ["maiz", "trigo", "sorgo", "cebada"], "bad_predecessors": ["soja", "arveja", "vicia"], "family": "Fabaceae"}, "vicia": {"type": "Leguminosa de invierno", "water_consumption": "Bajo", "cycle_days_range": [130, 170], "cycle_days_mid": 150, "notes": "Cultivo de cobertura y abono verde. Excelente fijadora de nitrógeno. Se puede usar como antecesor de maíz para reducir fertilización.", "optimal_temp_range_C": [5, 18], "absolute_min_temp_C": -8, "absolute_max_temp_C": 28, "min_precip_cycle_mm": 180, "optimal_precip_cycle_mm": 300, "sowing_months": [3, 4, 5, 6], "harvest_months": [9, 10, 11], "frost_tolerance": "alta", "heat_tolerance": "baja", "soil_nitrogen_effect": "fijador", "good_predecessors": ["maiz", "trigo", "sorgo", "cebada"], "bad_predecessors": ["soja", "arveja", "vicia"], "family": "Fabaceae"}, "colza": {"type": "Crucífera de invierno", "water_consumption": "Medio", "cycle_days_range": [140, 180], "cycle_days_mid": 160, "notes": "Canola/colza. Buena opción para diversificar la rotación invernal. Raíz pivotante mejora estructura del suelo. Sensible a heladas tardías en floración.", "optimal_temp_range_C": [10, 22], "absolute_min_temp_C": -5, "absolute_max_temp_C": 32, "min_precip_cycle_mm": 280, "optimal_precip_cycle_mm": 450, "sowing_months": [4, 5, 6], "harvest_months": [10, 11, 12], "frost_tolerance": "media", "heat_tolerance": "baja", "soil_nitrogen_effect": "consumidor_medio", "good_predecessors": ["soja", "maiz", "sorgo", "trigo"], "bad_predecessors": ["girasol", "colza"], "family": "Brassicaceae"}, "avena": {"type": "Gramínea de invierno", "water_consumption": "Bajo", "cycle_days_range": [120, 160], "cycle_days_mid": 140, "notes": "Cultivo invernal multipropósito: grano, forraje o cobertura. Muy rústica y adaptable. Buena producción de rastrojo.", "optimal_temp_range_C": [8, 20], "absolute_min_temp_C": -10, "absolute_max_temp_C": 32, "min_precip_cycle_mm": 200, "optimal_precip_cycle_mm": 350, "sowing_months": [3, 4, 5, 6], "harvest_months": [9, 10, 11], "frost_tolerance": "alta", "heat_tolerance": "baja", "soil_nitrogen_effect": "neutral", "good_predecessors": ["soja", "girasol", "arveja", "vicia"], "bad_predecessors": ["trigo", "cebada", "avena"], "family": "Poaceae"}, "papa": {"type": "Solanácea", "water_consumption": "Medio", "cycle_days_range": [100, 130], "cycle_days_mid": 115, "notes": "Tubérculo de alto valor económico tradicional en valles de Catamarca (Singuil) y sudeste pampeano. Exigente en labranza y nutrientes; susceptible a heladas tardías y enfermedades de suelo.", "optimal_temp_range_C": [15, 23], "absolute_min_temp_C": 2, "absolute_max_temp_C": 30, "min_precip_cycle_mm": 300, "optimal_precip_cycle_mm": 500, "sowing_months": [8, 9, 10, 1, 2], "harvest_months": [12, 1, 2, 5, 6], "frost_tolerance": "nula", "heat_tolerance": "baja", "soil_nitrogen_effect": "consumidor_medio", "good_predecessors": ["maiz", "trigo", "centeno_cobertura", "avena"], "bad_predecessors": ["papa"], "family": "Solanaceae"}};
+  const CLIMATES_DB = {"-27.8_-65.8": {"location": {"latitude": -27.8, "longitude": -65.8, "region_name": "Singuil (Catamarca/NOA)"}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 25.6, "2": 24.7, "3": 22.6, "4": 19.6, "5": 15.8, "6": 13.2, "7": 13.0, "8": 15.3, "9": 18.7, "10": 22.3, "11": 24.4, "12": 25.6}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}, "-31.42_-64.18": {"location": {"latitude": -31.42, "longitude": -64.18}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 24.2, "2": 23.3, "3": 21.2, "4": 18.2, "5": 14.4, "6": 11.8, "7": 11.6, "8": 13.9, "9": 17.3, "10": 20.9, "11": 23.0, "12": 24.2}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}, "-37.85_-58.26": {"location": {"latitude": -37.85, "longitude": -58.26, "region_name": "Balcarce (Sur)"}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 22.0, "2": 21.1, "3": 19.0, "4": 16.0, "5": 12.2, "6": 9.6, "7": 9.4, "8": 11.7, "9": 15.1, "10": 18.7, "11": 20.8, "12": 22.0}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}, "-33.89_-60.57": {"location": {"latitude": -33.89, "longitude": -60.57, "region_name": "Pergamino (Núcleo)"}, "period": {"start": "20050101", "end": "20251231", "years": 21}, "source": "NASA POWER (daily, community AG)", "thresholds": {"frost_tmin_c": 0, "heat_tmax_c": 35, "note": "Umbrales asumidos; pendientes de validar con bibliografía agronómica"}, "climate_normal_monthly": {"temp_avg_c": {"1": 24.6, "2": 23.7, "3": 21.6, "4": 18.6, "5": 14.8, "6": 12.2, "7": 12.0, "8": 14.3, "9": 17.7, "10": 21.3, "11": 23.4, "12": 24.6}, "precip_mm": {"1": 152.4, "2": 123.0, "3": 128.5, "4": 63.9, "5": 15.8, "6": 28.6, "7": 4.4, "8": 5.0, "9": 12.5, "10": 41.7, "11": 81.7, "12": 116.2}}, "annual_rainfall": {"mean_mm": 774.0, "cv_percent": 21.1, "min_mm": 518.0, "max_mm": 1215.0, "by_year_mm": {"2005": 556.0, "2006": 683.0, "2007": 826.0, "2008": 930.0, "2009": 582.0, "2010": 703.0, "2011": 813.0, "2012": 548.0, "2013": 688.0, "2014": 817.0, "2015": 906.0, "2016": 934.0, "2017": 954.0, "2018": 767.0, "2019": 791.0, "2020": 784.0, "2021": 1215.0, "2022": 685.0, "2023": 744.0, "2024": 518.0, "2025": 805.0}, "anomaly_by_year_mm": {"2005": -218.0, "2006": -91.0, "2007": 52.0, "2008": 156.0, "2009": -192.0, "2010": -71.0, "2011": 39.0, "2012": -226.0, "2013": -86.0, "2014": 43.0, "2015": 132.0, "2016": 160.0, "2017": 181.0, "2018": -7.0, "2019": 17.0, "2020": 11.0, "2021": 441.0, "2022": -88.0, "2023": -30.0, "2024": -256.0, "2025": 31.0}}, "frost_days": {"mean_per_year": 3.7, "mean_by_month": {"1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0, "5": 0.2, "6": 0.6, "7": 1.8, "8": 1.0, "9": 0.2, "10": 0.0, "11": 0.0, "12": 0.0}}, "heat_stress_days": {"mean_per_year": 19.4, "mean_by_month": {"1": 3.1, "2": 1.8, "3": 0.7, "4": 0.0, "5": 0.0, "6": 0.0, "7": 0.0, "8": 0.2, "9": 1.4, "10": 3.5, "11": 4.2, "12": 4.5}}, "indicators_pending": {"water_availability": null, "soil_moisture": null}}};
+
+  function getLocalClimate(lat, lon) {
+    let closest = null, minDist = Infinity;
+    for (const key in CLIMATES_DB) {
+      const c = CLIMATES_DB[key];
+      const d = Math.hypot(lat - c.location.latitude, lon - c.location.longitude);
+      if (d < minDist) { minDist = d; closest = c; }
+    }
+    const res = JSON.parse(JSON.stringify(closest || Object.values(CLIMATES_DB)[0]));
+    res.location = { latitude: lat, longitude: lon };
+    return res;
+  }
+
+  function tempFitness(crop, monthlyTemp, plantingMonth, cycleMonths) {
+    const [optMin, optMax] = crop.optimal_temp_range_C;
+    const absMin = crop.absolute_min_temp_C;
+    const absMax = crop.absolute_max_temp_C;
+    const scores = [];
+    for (let i = 0; i < cycleMonths; i++) {
+      const m = ((plantingMonth - 1 + i) % 12) + 1;
+      const t = monthlyTemp[m] ?? monthlyTemp[String(m)] ?? 20;
+      if (t >= optMin && t <= optMax) {
+        const center = (optMin + optMax) / 2;
+        const half = (optMax - optMin) / 2 || 1;
+        scores.push(100 - 10 * (Math.abs(t - center) / half));
+      } else if (t < absMin || t > absMax) {
+        scores.push(0);
+      } else if (t < optMin) {
+        const w = optMin - absMin;
+        scores.push(Math.max(0, 80 * (1 - (optMin - t) / w)));
+      } else {
+        const w = absMax - optMax;
+        scores.push(Math.max(0, 80 * (1 - (t - optMax) / w)));
+      }
+    }
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  }
+
+  function precipFitness(crop, monthlyPrecip, plantingMonth, cycleMonths) {
+    let tot = 0;
+    for (let i = 0; i < cycleMonths; i++) {
+      const m = ((plantingMonth - 1 + i) % 12) + 1;
+      tot += (monthlyPrecip[m] ?? monthlyPrecip[String(m)] ?? 50);
+    }
+    const minP = crop.min_precip_cycle_mm;
+    const optP = crop.optimal_precip_cycle_mm;
+    if (tot >= optP) {
+      const ex = tot / optP;
+      if (ex > 1.5) return Math.max(50, 100 - Math.min(30, (ex - 1.5) * 40));
+      return 100;
+    }
+    if (tot <= minP * 0.5) return 0;
+    if (tot <= minP) return 40 * (tot / minP);
+    return 40 + 60 * ((tot - minP) / (optP - minP));
+  }
+
+  function frostPenalty(crop, frostByMonth, plantingMonth, cycleMonths) {
+    const sensMap = { alta: 0.1, media: 0.4, baja: 0.8, nula: 1.0 };
+    const sens = sensMap[crop.frost_tolerance] ?? 0.5;
+    let tot = 0;
+    for (let i = 0; i < cycleMonths; i++) {
+      const m = ((plantingMonth - 1 + i) % 12) + 1;
+      tot += (frostByMonth[m] ?? frostByMonth[String(m)] ?? 0);
+    }
+    if (tot === 0) return 0;
+    return Math.min(100, (tot / 5.0) * sens * 100);
+  }
+
+  function heatPenalty(crop, heatByMonth, plantingMonth, cycleMonths) {
+    const sensMap = { alta: 0.15, media: 0.5, baja: 1.0 };
+    const sens = sensMap[crop.heat_tolerance] ?? 0.5;
+    let tot = 0;
+    for (let i = 0; i < cycleMonths; i++) {
+      const m = ((plantingMonth - 1 + i) % 12) + 1;
+      tot += (heatByMonth[m] ?? heatByMonth[String(m)] ?? 0);
+    }
+    if (tot === 0) return 0;
+    return Math.min(100, (tot / 15.0) * sens * 100);
+  }
+
+  function rainVarRisk(annualRain) {
+    const cv = annualRain.cv_percent ?? 20;
+    const mean = annualRain.mean_mm ?? 700;
+    const min = annualRain.min_mm ?? 500;
+    const cvScore = Math.min(50, (cv / 30) * 50);
+    const dScore = mean > 0 ? Math.max(0, 1 - (min / mean)) * 50 : 25;
+    return Math.min(100, cvScore + dScore);
+  }
+
+  function computeLocalCropScore(key, crop, climate, plantingMonth, cycleMonths) {
+    const monthlyTemp = climate.climate_normal_monthly.temp_avg_c;
+    const monthlyPrecip = climate.climate_normal_monthly.precip_mm;
+    const frostByMonth = climate.frost_days.mean_by_month;
+    const heatByMonth = climate.heat_stress_days.mean_by_month;
+    const annualRain = climate.annual_rainfall;
+
+    const sowingMonths = crop.sowing_months || [];
+    const isValid = sowingMonths.includes(plantingMonth);
+    const adjMonths = sowingMonths.flatMap(m => [((m - 2 + 12) % 12) + 1, (m % 12) + 1]);
+    const isAdj = !isValid && adjMonths.includes(plantingMonth);
+
+    const sowingFactor = isValid ? 1.0 : (isAdj ? 0.85 : 0.40);
+    const sowingPenalty = isValid ? 0 : (isAdj ? 15 : 50);
+
+    const tFit = tempFitness(crop, monthlyTemp, plantingMonth, cycleMonths);
+    const pFit = precipFitness(crop, monthlyPrecip, plantingMonth, cycleMonths);
+    const fPen = frostPenalty(crop, frostByMonth, plantingMonth, cycleMonths);
+    const hPen = heatPenalty(crop, heatByMonth, plantingMonth, cycleMonths);
+    const rVar = rainVarRisk(annualRain);
+
+    const fSafe = Math.max(0, 100 - fPen);
+    const hSafe = Math.max(0, 100 - hPen);
+    const rSafe = Math.max(0, 100 - rVar);
+
+    const base = 0.30 * tFit + 0.30 * pFit + 0.15 * fSafe + 0.10 * hSafe + 0.15 * rSafe;
+    const finalScore = Math.max(0, Math.min(100, base * sowingFactor));
+    const name = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    return {
+      crop: key,
+      crop_key: key,
+      name: name,
+      crop_name: name,
+      score: Math.round(finalScore * 10) / 10,
+      probability_score: Math.round(finalScore * 10) / 10,
+      crop_type: crop.type || '',
+      type: crop.type || '',
+      family: crop.family || '',
+      water_consumption: crop.water_consumption || 'Medio',
+      cycle_days_mid: crop.cycle_days_mid || 120,
+      notes: crop.notes || '',
+      breakdown: {
+        temperature_fitness: Math.round(tFit * 10) / 10,
+        precipitation_fitness: Math.round(pFit * 10) / 10,
+        frost_risk_penalty: Math.round(fPen * 10) / 10,
+        heat_risk_penalty: Math.round(hPen * 10) / 10,
+        rainfall_variability_risk: Math.round(rVar * 10) / 10,
+        sowing_month_valid: isValid,
+        sowing_penalty: sowingPenalty,
+      }
+    };
+  }
+
+  function clientRankCrops(climate, plantingMonth, cycleMonths) {
+    const res = [];
+    for (const key in CROPS_DB) {
+      res.push(computeLocalCropScore(key, CROPS_DB[key], climate, plantingMonth, cycleMonths));
+    }
+    res.sort((a, b) => b.score - a.score);
+    return res;
+  }
+
+  function clientPredecessorCompatibility(currKey, currCrop, predKey, predCrop) {
+    if (!predKey || !predCrop) return { bonus: 0, reasons: ['Primer cultivo de la secuencia'] };
+    let bonus = 0;
+    const reasons = [];
+    const good = currCrop.good_predecessors || [];
+    const bad = currCrop.bad_predecessors || [];
+    if (good.includes(predKey)) { bonus += 6; reasons.push(`✓ ${predKey} es buen antecesor para ${currKey}`); }
+    if (bad.includes(predKey)) { bonus -= 6; reasons.push(`✗ ${predKey} es mal antecesor para ${currKey}`); }
+
+    const typeCat = t => t.includes('Gram') ? 'graminea' : (t.includes('Legum') ? 'leguminosa' : 'otra');
+    const cCat = typeCat(currCrop.type || ''), pCat = typeCat(predCrop.type || '');
+    if (cCat !== pCat && cCat !== 'otra' && pCat !== 'otra') { bonus += 4; reasons.push('✓ Alternancia gramínea-leguminosa'); }
+    else if (cCat === pCat && cCat !== 'otra') { bonus -= 2.5; reasons.push('✗ Misma categoría funcional consecutiva'); }
+
+    if (currCrop.family && predCrop.family) {
+      if (currCrop.family === predCrop.family) { bonus -= 3; reasons.push(`✗ Misma familia (${currCrop.family})`); }
+      else { bonus += 2.5; reasons.push(`✓ Rotación de familia (${predCrop.family} → ${currCrop.family})`); }
+    }
+
+    const pN = predCrop.soil_nitrogen_effect || 'neutral', cN = currCrop.soil_nitrogen_effect || 'neutral';
+    if (pN === 'fijador' && (cN === 'consumidor_alto' || cN === 'consumidor_medio')) {
+      bonus += 3; reasons.push('✓ Aprovecha nitrógeno fijado por antecesor');
+    } else if (pN === 'consumidor_alto' && cN === 'fijador') {
+      bonus += 2; reasons.push('✓ Fijador después de consumidor alto: recupera N');
+    }
+
+    return { bonus: Math.max(-15, Math.min(15, bonus)), reasons: reasons.length ? reasons : ['Compatibilidad estándar'] };
+  }
+
+  function clientTimingCompatible(predCrop, currCrop) {
+    const hm = predCrop.harvest_months || [];
+    const sm = currCrop.sowing_months || [];
+    if (!hm.length || !sm.length) return true;
+    for (const h of hm) {
+      for (const s of sm) {
+        if (s >= h) return true;
+        if (h >= 9 && s <= 7) return true;
+        if (h <= 8 && s >= 9) return true;
+      }
+    }
+    return false;
+  }
+
+  function clientBuildRotation(climate, numCycles, startMonth, firstCropKey) {
+    const summerMonths = [9, 10, 11, 12];
+    const winterMonths = [3, 4, 5, 6, 7];
+    const startIsSummer = summerMonths.includes(startMonth) || [8, 9].includes(startMonth);
+    const sequence = [];
+    let prevKey = null, prevCrop = null;
+
+    for (let slot = 0; slot < numCycles * 2; slot++) {
+      const isSummer = startIsSummer ? (slot % 2 === 0) : (slot % 2 === 1);
+      const cycleYear = Math.floor(slot / 2) + 1;
+      const season = isSummer ? 'verano' : 'invierno';
+
+      const validCrops = {};
+      for (const k in CROPS_DB) {
+        const sw = CROPS_DB[k].sowing_months || [];
+        if (isSummer && sw.some(m => summerMonths.includes(m))) validCrops[k] = CROPS_DB[k];
+        else if (!isSummer && sw.some(m => winterMonths.includes(m))) validCrops[k] = CROPS_DB[k];
+      }
+
+      let chosenKey = null, chosenCrop = null, baseScore = null, rotBonus = 0, reasons = [], plantM = 10, cycleM = 4;
+
+      if (slot === 0 && firstCropKey && CROPS_DB[firstCropKey]) {
+        chosenKey = firstCropKey;
+        chosenCrop = CROPS_DB[firstCropKey];
+        plantM = isSummer ? 10 : 5;
+        cycleM = Math.floor((chosenCrop.cycle_days_mid || 120) / 30) || 4;
+        baseScore = computeLocalCropScore(chosenKey, chosenCrop, climate, plantM, cycleM);
+        reasons = ['Primer cultivo seleccionado'];
+      } else {
+        let bestScore = -999;
+        const recent = sequence.slice(-2).map(s => s.crop_key);
+        for (const k in validCrops) {
+          const cr = validCrops[k];
+          if (prevCrop && !clientTimingCompatible(prevCrop, cr)) continue;
+          const pM = isSummer ? (cr.sowing_months.find(m => summerMonths.includes(m)) || 10) : (cr.sowing_months.find(m => winterMonths.includes(m)) || 5);
+          const cM = Math.floor((cr.cycle_days_mid || 120) / 30) || 4;
+          const sc = computeLocalCropScore(k, cr, climate, pM, cM);
+          const compat = clientPredecessorCompatibility(k, cr, prevKey, prevCrop);
+          let b = compat.bonus;
+          if (recent.includes(k)) b -= 7;
+          const tot = sc.score + b;
+          if (tot > bestScore) {
+            bestScore = tot;
+            chosenKey = k;
+            chosenCrop = cr;
+            baseScore = sc;
+            rotBonus = b;
+            reasons = compat.reasons;
+            plantM = pM;
+            cycleM = cM;
+          }
+        }
+      }
+
+      if (!chosenKey) continue;
+      const harvestM = ((plantM - 1 + cycleM) % 12) + 1;
+      const adjScore = Math.max(0, Math.min(100, baseScore.score + rotBonus));
+      const cropTitle = chosenKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+      sequence.push({
+        slot: slot + 1,
+        cycle_year: cycleYear,
+        season: season,
+        crop: chosenKey,
+        crop_key: chosenKey,
+        name: cropTitle,
+        crop_name: cropTitle,
+        crop_type: chosenCrop.type || '',
+        family: chosenCrop.family || '',
+        water_consumption: chosenCrop.water_consumption || 'Medio',
+        planting_month: plantM,
+        harvest_month: harvestM,
+        estimated_harvest_month: harvestM,
+        base_score: baseScore.score,
+        rotation_bonus: Math.round(rotBonus * 10) / 10,
+        bonus: Math.round(rotBonus * 10) / 10,
+        score: Math.round(adjScore * 10) / 10,
+        adjusted_score: Math.round(adjScore * 10) / 10,
+        score_breakdown: baseScore.breakdown,
+        compatibility_notes: reasons,
+        succession_reason: reasons.join(' | '),
+        nitrogen_effect: chosenCrop.soil_nitrogen_effect || 'neutral',
+      });
+
+      prevKey = chosenKey;
+      prevCrop = chosenCrop;
+    }
+
+    const avgScore = sequence.length ? sequence.reduce((s, c) => s + c.adjusted_score, 0) / sequence.length : 0;
+    const fams = [...new Set(sequence.map(s => s.family))].sort();
+    const benefits = [
+      'Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes sintéticos.',
+      `Diversificación biológica (${fams.join(', ')}): corta ciclos de patógenos edáficos y malezas tolerantes.`,
+      'Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión.',
+      'Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.'
+    ];
+    const warnings = ['Monitorear condiciones hídricas de la cama de siembra durante la ventana de implantación.'];
+
+    return {
+      num_cycles: numCycles,
+      total_crops: sequence.length,
+      total_score: Math.round(avgScore * 10) / 10,
+      average_score: Math.round(avgScore * 10) / 10,
+      benefits: benefits,
+      warnings: warnings,
+      sequence: sequence,
+      summary: {
+        average_adjusted_score: Math.round(avgScore * 10) / 10,
+        families_used: fams,
+        diversity_index: new Set(sequence.map(s => s.crop_key)).size
+      }
+    };
+  }
+
+
+  // ──── Analyze ────
+  $btn.addEventListener('click', () => analyze());
+
+  async function analyze(firstCrop = null) {
+    const lat = parseFloat($lat.value);
+    const lon = parseFloat($lon.value);
+    const month = parseInt($month.value);
+    const cycle = parseInt($cycle.value);
+    const numCycles = parseInt($cycles.value);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      showError('Por favor ingresá coordenadas válidas.');
+      return;
+    }
+
+    hideError();
+    showLoading(true);
+    $btn.classList.add('loading');
+    $btn.disabled = true;
+
+    let ranking, rotation, climate;
+
+    try {
+      const rotPayload = {
+        latitude: lat,
+        longitude: lon,
+        start_month: month,
+        num_cycles: numCycles
+      };
+      if (firstCrop) {
+        rotPayload.first_crop_key = firstCrop;
+      }
+
+      // Timeout corto (2.5s) para detectar si no hay servidor backend (ej. GitHub Pages estático)
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 2500);
+
+      const [rankingRes, rotationRes, climateRes] = await Promise.all([
+        fetch(`${API}/api/v1/ranking?lat=${lat}&lon=${lon}&planting_month=${month}&cycle_months=${cycle}`, { signal: ctrl.signal }),
+        fetch(`${API}/api/v1/rotation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rotPayload),
+          signal: ctrl.signal
+        }),
+        fetch(`${API}/climate?lat=${lat}&lon=${lon}`, { signal: ctrl.signal })
+      ]);
+      clearTimeout(tid);
+
+      if (!rankingRes.ok || !rotationRes.ok || !climateRes.ok) {
+        throw new Error('Servidor API remoto no disponible');
+      }
+
+      ranking = await rankingRes.json();
+      rotation = await rotationRes.json();
+      climate = await climateRes.json();
+
+    } catch (err) {
+      console.info('Activando motor agroclimático integrado (Modo GitHub Pages / Standalone):', err.message);
+      climate = getLocalClimate(lat, lon);
+      ranking = clientRankCrops(climate, month, cycle);
+      rotation = clientBuildRotation(climate, numCycles, month, firstCrop);
+    }
+
+    showLoading(false);
+    renderRanking(ranking);
+    renderRotation(rotation);
+    renderClimate(climate);
+    return;
+  }
+      showLoading(false);
+      showError(`No se pudo conectar con el servidor API (${API}). Asegurate de que el backend esté corriendo. ${err.message}`);
+      console.error(err);
+    } finally {
+      $btn.classList.remove('loading');
+      $btn.disabled = false;
+    }
+  }
+
+  // ──── UI helpers ────
+  function showLoading(on) {
+    $placeholder.classList.add('hidden');
+    if (on) {
+      $loading.classList.remove('hidden');
+      $rankSection.classList.add('hidden');
+      $rotSection.classList.add('hidden');
+      $climateSection.classList.add('hidden');
+    } else {
+      $loading.classList.add('hidden');
+    }
+  }
+
+  function showError(msg) {
+    $errorText.textContent = msg;
+    $error.classList.add('visible');
+  }
+
+  function hideError() {
+    $error.classList.remove('visible');
+  }
+
+  function scoreClass(score) {
+    if (score >= 70) return 'high';
+    if (score >= 50) return 'mid';
+    return 'low';
+  }
+
+  function scoreColor(score) {
+    if (score >= 70) return 'var(--mid-green)';
+    if (score >= 50) return 'var(--yellow)';
+    return 'var(--red)';
+  }
+
+  function getEmoji(cropKey) {
+    // Normalize key
+    const key = (cropKey || '').toLowerCase().replace(/[^a-z_]/g, '');
+    return CROP_EMOJI[key] || '🌱';
+  }
+
+  function formatCropName(key) {
+    if (!key) return '';
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function waterDrops(level) {
+    // level: bajo=1, medio=2, alto=3
+    const map = { bajo: 1, medio: 2, alto: 3 };
+    const n = map[(level || '').toLowerCase()] || 2;
+    return '💧'.repeat(n) + '<span style="opacity:.25">' + '💧'.repeat(3 - n) + '</span>';
+  }
+
+  function typeBadgeClass(type) {
+    if (!type) return 'badge-other';
+    const t = type.toLowerCase();
+    if (t.includes('gram')) return 'badge-graminea';
+    if (t.includes('legum') || t.includes('fabac')) return 'badge-leguminosa';
+    return 'badge-other';
+  }
+
+  // ──── Render Ranking ────
+  function renderRanking(data) {
+    // data can be an array or { crops: [...] } or { ranking: [...] }
+    let crops = Array.isArray(data) ? data : (data.crops || data.ranking || data.results || []);
+    crops.sort((a, b) => (b.score || b.probability_score || 0) - (a.score || a.probability_score || 0));
+
+    $rankGrid.innerHTML = '';
+    crops.forEach((crop, i) => {
+      const score = Math.round(crop.score ?? crop.probability_score ?? 0);
+      const name = crop.crop || crop.name || crop.crop_name || 'Cultivo';
+      const type = crop.type || crop.crop_type || '';
+      const water = crop.water_consumption || '';
+
+      // Score breakdown
+      const breakdown = crop.breakdown || crop.score_breakdown || {};
+      const tempFit = Math.round(breakdown.temperature_fitness ?? breakdown.temp_fitness ?? 0);
+      const precipFit = Math.round(breakdown.precipitation_fitness ?? breakdown.precip_fitness ?? 0);
+      const frostRisk = Math.round(breakdown.frost_risk_penalty ?? breakdown.frost_risk ?? breakdown.frost_penalty ?? 0);
+      const heatRisk = Math.round(breakdown.heat_risk_penalty ?? breakdown.heat_risk ?? breakdown.heat_penalty ?? 0);
+      const rainVar = Math.round(breakdown.rainfall_variability_risk ?? breakdown.rainfall_variability ?? breakdown.rainfall_var ?? 0);
+
+      const cls = scoreClass(score);
+      const circumference = 2 * Math.PI * 22;
+      const offset = circumference - (score / 100) * circumference;
+
+      const card = document.createElement('div');
+      card.className = `crop-card score-${cls}`;
+      card.style.animationDelay = `${i * 0.08}s`;
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-crop-name">
+            <span class="emoji">${getEmoji(name)}</span>
+            <span class="name">${formatCropName(name)}</span>
+          </div>
+          <div class="circle-score">
+            <svg viewBox="0 0 56 56">
+              <circle class="bg" cx="28" cy="28" r="22" fill="none" stroke-width="5"/>
+              <circle class="fg" cx="28" cy="28" r="22" fill="none" stroke-width="5"
+                stroke="${scoreColor(score)}"
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${circumference}"
+                data-target="${offset}"/>
+            </svg>
+            <span class="score-text" style="color:${scoreColor(score)}" data-target="${score}">0%</span>
+          </div>
+        </div>
+
+        <div class="card-badges">
+          ${type ? `<span class="badge ${typeBadgeClass(type)}">${type}</span>` : ''}
+          ${water ? `<span class="water-indicator">${waterDrops(water)}</span>` : ''}
+        </div>
+
+        <div class="breakdown">
+          ${barRow('🌡️', 'Temp', tempFit)}
+          ${barRow('🌧️', 'Precip', precipFit)}
+          ${barRow('❄️', 'Helada', 100 - frostRisk)}
+          ${barRow('🔥', 'Calor', 100 - heatRisk)}
+          ${barRow('📊', 'Variab.', 100 - rainVar)}
+        </div>
+
+        <button type="button" class="btn-select-crop" data-crop="${crop.crop_key || crop.crop || name}">
+          🔄 Simular rotación iniciando con ${formatCropName(name)} ➔
+        </button>
+      `;
+
+      const btnSel = card.querySelector('.btn-select-crop');
+      if (btnSel) {
+        btnSel.addEventListener('click', (e) => {
+          e.stopPropagation();
+          analyze(btnSel.dataset.crop);
+        });
+      }
+
+      $rankGrid.appendChild(card);
+    });
+
+    $rankSection.classList.remove('hidden');
+
+    // Trigger animations after paint
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Animate circle scores
+        document.querySelectorAll('.circle-score .fg').forEach(el => {
+          el.style.strokeDashoffset = el.dataset.target;
+        });
+        // Animate score text counters
+        document.querySelectorAll('.circle-score .score-text').forEach(el => {
+          animateCounter(el, parseInt(el.dataset.target));
+        });
+        // Animate bar fills
+        document.querySelectorAll('.bar-fill').forEach(el => {
+          el.style.width = el.dataset.target + '%';
+        });
+      });
+    });
+  }
+
+  function barRow(icon, label, value) {
+    const v = Math.max(0, Math.min(100, value));
+    return `
+      <div class="bar-row">
+        <span class="bar-icon">${icon}</span>
+        <span class="bar-label">${label}</span>
+        <span class="bar-track"><span class="bar-fill ${scoreClass(v)}" data-target="${v}"></span></span>
+        <span class="bar-val">${v}</span>
+      </div>`;
+  }
+
+  function animateCounter(el, target) {
+    let current = 0;
+    const step = Math.max(1, Math.ceil(target / 40));
+    const interval = setInterval(() => {
+      current += step;
+      if (current >= target) { current = target; clearInterval(interval); }
+      el.textContent = current + '%';
+    }, 25);
+  }
+
+  // ──── Render Rotation ────
+  function renderRotation(data) {
+    // data can be { sequence: [...], total_score, benefits, warnings } or array
+    const sequence = data.sequence || data.rotation || data.crops || [];
+    const totalScore = data.total_score ?? data.average_score ?? 0;
+    const benefits = data.benefits || data.advantages || [];
+    const warnings = data.warnings || data.risks || [];
+
+    $timeline.innerHTML = '';
+
+    sequence.forEach((item, i) => {
+      const name = item.crop || item.name || item.crop_name || '';
+      const score = Math.round(item.score ?? item.adjusted_score ?? item.probability_score ?? 0);
+      const cls = scoreClass(score);
+      const plantMonth = item.planting_month ?? item.start_month ?? '';
+      const harvestMonth = item.harvest_month ?? item.end_month ?? '';
+      const bonus = item.rotation_bonus ?? item.bonus ?? 0;
+
+      const card = document.createElement('div');
+      card.className = `tl-card score-${cls}`;
+      card.style.animationDelay = `${i * 0.15}s`;
+
+      const plantLabel = plantMonth ? MONTHS[(plantMonth - 1) % 12] : '';
+      const harvestLabel = harvestMonth ? MONTHS[(harvestMonth - 1) % 12] : '';
+
+      let bonusHTML = '';
+      if (bonus > 0) bonusHTML = `<div class="bonus-tag positive">▲ +${bonus}</div>`;
+      else if (bonus < 0) bonusHTML = `<div class="bonus-tag negative">▼ ${bonus}</div>`;
+
+      card.innerHTML = `
+        <div class="cycle-label">Ciclo ${i + 1}</div>
+        <div class="crop-emoji">${getEmoji(name)}</div>
+        <div class="crop-name">${formatCropName(name)}</div>
+        <div class="period">${plantLabel}${harvestLabel ? ' → ' + harvestLabel : ''}</div>
+        <div class="tl-score" style="color:${scoreColor(score)}">${score}%</div>
+        ${bonusHTML}
+        ${item.succession_reason ? `<div class="tl-succ-badge" title="${item.succession_reason}">💡 ${item.succession_reason.split('|')[0].trim()}</div>` : ''}
+      `;
+
+      $timeline.appendChild(card);
+
+      // Arrow between cards
+      if (i < sequence.length - 1) {
+        const arrow = document.createElement('div');
+        arrow.className = 'tl-arrow';
+        arrow.style.animationDelay = `${i * 0.15 + 0.1}s`;
+        arrow.textContent = '➔';
+        $timeline.appendChild(arrow);
+      }
+    });
+
+    // Summary
+    if (sequence.length > 0) {
+      const avgScore = Math.round(totalScore || sequence.reduce((s, c) => s + (c.score ?? c.adjusted_score ?? 0), 0) / sequence.length);
+      let benefitsHTML = '';
+      let warningsHTML = '';
+
+      if (benefits.length) {
+        benefitsHTML = `
+          <div>
+            <div class="rot-list-title benefits">✅ Beneficios</div>
+            <ul class="rot-list">${benefits.map(b => `<li><span>•</span> ${b}</li>`).join('')}</ul>
+          </div>`;
+      }
+
+      if (warnings.length) {
+        warningsHTML = `
+          <div>
+            <div class="rot-list-title warnings">⚠️ Advertencias</div>
+            <ul class="rot-list">${warnings.map(w => `<li><span>•</span> ${w}</li>`).join('')}</ul>
+          </div>`;
+      }
+
+      $rotSummary.innerHTML = `
+        <div class="rot-total-score">
+          <div class="big-num" style="color:${scoreColor(avgScore)}">${avgScore}%</div>
+          <div class="sub">Puntaje total</div>
+        </div>
+        ${benefitsHTML || '<div></div>'}
+        ${warningsHTML || '<div></div>'}
+      `;
+      $rotSummary.classList.remove('hidden');
+    }
+
+    $rotSection.classList.remove('hidden');
+  }
+
+  // ──── Render Climate ────
+  function renderClimate(data) {
+    let normals = data.monthly_normals || (data.indicators && data.indicators.monthly_normals) || data.normals;
+
+    if (!normals && data.climate_normal_monthly) {
+      normals = [];
+      const tempAvg = data.climate_normal_monthly.temp_avg_c || {};
+      const rainMm = data.climate_normal_monthly.precip_mm || {};
+      const frostMean = data.frost_days?.mean_by_month || {};
+      const heatMean = data.heat_stress_days?.mean_by_month || {};
+      for (let m = 1; m <= 12; m++) {
+        normals.push({
+          month: m,
+          temp_mean: tempAvg[m] ?? tempAvg[String(m)] ?? 20,
+          precipitation: rainMm[m] ?? rainMm[String(m)] ?? 50,
+          frost_days: frostMean[m] ?? frostMean[String(m)] ?? 0,
+          heat_days: heatMean[m] ?? heatMean[String(m)] ?? 0,
+        });
+      }
+    }
+
+    if (!normals || !normals.length) {
+      $climateSection.classList.add('hidden');
+      return;
+    }
+
+    // Extract data
+    const temps = normals.map(m => m.temp_mean ?? m.temperature ?? m.T2M ?? 0);
+    const rains = normals.map(m => m.precipitation ?? m.rainfall ?? m.PRECTOTCORR ?? 0);
+    const frosts = normals.map(m => m.frost_days ?? m.frost ?? 0);
+    const heats = normals.map(m => m.heat_days ?? m.heat ?? m.heat_stress_days ?? 0);
+
+    const maxTemp = Math.max(...temps, 1);
+    const maxRain = Math.max(...rains, 1);
+
+    // Temperature chart
+    let tempBarsHTML = '';
+    for (let i = 0; i < 12; i++) {
+      const t = temps[i] || 0;
+      const h = (t / maxTemp) * 100;
+      const isFrost = (frosts[i] || 0) > 2;
+      const isHeat = (heats[i] || 0) > 5;
+      let extraClass = '';
+      if (isFrost) extraClass = ' frost-highlight';
+      if (isHeat) extraClass = ' heat-highlight';
+      tempBarsHTML += `
+        <div class="bar-col">
+          <span class="val">${t.toFixed(1)}°</span>
+          <div class="bar temp${extraClass}" style="height:${h}%"></div>
+          <span class="mo">${MONTHS[i].substring(0, 3)}</span>
+        </div>`;
+    }
+
+    // Rainfall chart
+    let rainBarsHTML = '';
+    for (let i = 0; i < 12; i++) {
+      const r = rains[i] || 0;
+      const h = (r / maxRain) * 100;
+      rainBarsHTML += `
+        <div class="bar-col">
+          <span class="val">${r.toFixed(0)}</span>
+          <div class="bar rain" style="height:${h}%"></div>
+          <span class="mo">${MONTHS[i].substring(0, 3)}</span>
+        </div>`;
+    }
+
+    $climateContent.innerHTML = `
+      <div class="chart-section">
+        <div class="chart-label">🌡️ Temperatura Media Mensual (°C)</div>
+        <div class="css-chart">${tempBarsHTML}</div>
+        <div class="chart-legend">
+          <span><span class="legend-dot" style="background:${'var(--blue-frost)'}; border:2px solid var(--blue-frost);"></span> Riesgo helada</span>
+          <span><span class="legend-dot" style="background:${'var(--red)'}; border:2px solid var(--red);"></span> Estrés calor</span>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-label">🌧️ Precipitación Mensual (mm)</div>
+        <div class="css-chart">${rainBarsHTML}</div>
+      </div>
+    `;
+
+    $climateSection.classList.remove('hidden');
+  }
+
+})();
+</script>
+
+</body>
+</html>
