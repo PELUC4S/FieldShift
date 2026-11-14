@@ -83,6 +83,26 @@
       "bad_predecessors": ["soja", "girasol"],
       "family": "Fabaceae"
     },
+    "garbanzo": {
+      "type": "Leguminosa de invierno",
+      "water_consumption": "Bajo",
+      "cycle_days_range": [130, 160],
+      "cycle_days_mid": 145,
+      "notes": "Leguminosa invernal. Excelente tolerancia a la sequía; se nutre principalmente del agua almacenada en el perfil del suelo. Muy sensible al anegamiento y a las enfermedades radiculares.",
+      "optimal_temp_range_C": [15, 25],
+      "absolute_min_temp_C": -5,
+      "absolute_max_temp_C": 35,
+      "min_precip_cycle_mm": 250,
+      "optimal_precip_cycle_mm": 400,
+      "sowing_months": [5, 6],
+      "harvest_months": [10, 11, 12],
+      "frost_tolerance": "media",
+      "heat_tolerance": "media",
+      "soil_nitrogen_effect": "fijador",
+      "good_predecessors": ["maiz", "sorgo", "trigo"],
+      "bad_predecessors": ["garbanzo", "soja", "poroto", "girasol", "mani"],
+      "family": "Fabaceae"
+    },
     "sorgo": {
       "type": "Gramínea",
       "water_consumption": "Bajo",
