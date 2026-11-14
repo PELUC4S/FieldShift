@@ -270,9 +270,13 @@ def compute_crop_score(
     # 1. Agua disponible compuesta (Lluvia acumulada + reserva hídrica SMAP / SoilGrids)
     awc_total_mm = 85.0
     usda_text = "Franco"
-    if soil and "water_retention" in soil:
-        awc_total_mm = float(soil["water_retention"].get("total_awc_0_60cm_mm", 85.0))
-        usda_text = soil.get("texture", {}).get("usda_class", "Franco")
+    if soil:
+        if "water_retention" in soil:
+            awc_total_mm = float(soil["water_retention"].get("total_awc_0_60cm_mm", 85.0))
+        elif "available_water_capacity_mm" in soil:
+            awc_total_mm = float(soil["available_water_capacity_mm"])
+        tex = soil.get("texture", {})
+        usda_text = tex.get("usda_class", "Franco") if isinstance(tex, dict) else (str(tex) if tex else "Franco")
 
     root_pct = 50.0
     if sat and "smap_soil_moisture" in sat:

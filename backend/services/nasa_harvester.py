@@ -22,57 +22,6 @@ CACHE_DIR = BASE_DIR / "data" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _determine_soil_profile(lat: float, lon: float) -> dict[str, Any]:
-    """
-    Determina el perfil y textura de suelo característico para coordenadas
-    de la región agrícola sudamericana (Argentina: Pampa Húmeda, Núcleo, Centro, NOA, Sur).
-    """
-    # Pergamino / Zona Núcleo (-33 a -35, -62 a -59)
-    if -35.5 <= lat <= -32.5 and -62.5 <= lon <= -59.0:
-        return {
-            "texture": "Franco-limoso",
-            "available_water_capacity_mm": 155.0,
-            "organic_matter_pct": 3.2,
-            "drainage": "Bueno a moderado",
-            "rooting_depth_cm": 120,
-        }
-    # Córdoba Centro / Secano (-30.5 a -33.5, -65.5 a -62.5)
-    elif -34.0 <= lat <= -30.0 and -65.5 <= lon <= -62.5:
-        return {
-            "texture": "Franco-arenoso a Franco",
-            "available_water_capacity_mm": 125.0,
-            "organic_matter_pct": 2.2,
-            "drainage": "Rápido a moderado",
-            "rooting_depth_cm": 100,
-        }
-    # Balcarce / Sur Bonaerense (-36.5 a -39.0, -60.0 a -57.5)
-    elif -39.0 <= lat <= -36.5 and -60.0 <= lon <= -57.0:
-        return {
-            "texture": "Franco-arcilloso con tosca profunda",
-            "available_water_capacity_mm": 140.0,
-            "organic_matter_pct": 4.1,
-            "drainage": "Bueno",
-            "rooting_depth_cm": 90,
-        }
-    # NOA / Catamarca / Tucumán (-26 a -29, -66 a -64)
-    elif -29.0 <= lat <= -25.5 and -67.0 <= lon <= -64.0:
-        return {
-            "texture": "Franco-arenoso aluvial",
-            "available_water_capacity_mm": 110.0,
-            "organic_matter_pct": 1.7,
-            "drainage": "Excesivo a bueno",
-            "rooting_depth_cm": 85,
-        }
-    # Genérico Pampeano
-    return {
-        "texture": "Franco-limoso agrícola",
-        "available_water_capacity_mm": 130.0,
-        "organic_matter_pct": 2.6,
-        "drainage": "Bueno",
-        "rooting_depth_cm": 100,
-    }
-
-
 def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """
     Calcula y modela las lecturas satelitales en tiempo real según las fuentes oficiales de NASA y SoilGrids:
@@ -206,23 +155,27 @@ def get_satellite_readings(lat: float, lon: float, climate_data: Optional[dict[s
     """
     Obtiene las lecturas satelitales consultando la caché local o generando
     el cálculo normalizado según especificaciones NASA.
+    Garantiza que el perfil edafológico (SoilGrids) esté siempre sincronizado con los cálculos agronómicos.
     """
     lat_r, lon_r = round(lat, 2), round(lon, 2)
     cache_file = CACHE_DIR / f"satelite_{lat_r}_{lon_r}.json"
 
+    readings = None
     if cache_file.exists():
         try:
-            return json.loads(cache_file.read_text(encoding="utf-8"))
+            readings = json.loads(cache_file.read_text(encoding="utf-8"))
         except Exception as e:
             logger.warning(f"Error al leer caché satelital {cache_file}: {e}")
 
-    # Calcular y persistir
-    readings = calculate_satellite_metrics(lat_r, lon_r, climate_data)
-    try:
-        cache_file.write_text(json.dumps(readings, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        logger.warning(f"No se pudo guardar caché satelital {cache_file}: {e}")
+    if not readings:
+        readings = calculate_satellite_metrics(lat_r, lon_r, climate_data)
+        try:
+            cache_file.write_text(json.dumps(readings, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"No se pudo guardar caché satelital {cache_file}: {e}")
 
+    # Sincronización mandatoria: inyectar SIEMPRE el perfil edafológico SoilGrids oficial y actualizado
+    readings["soil_profile"] = query_soilgrids(lat_r, lon_r)
     return readings
 
 

@@ -177,6 +177,8 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
             "ph_class": "Neutro" if 6.2 <= ph <= 7.3 else ("Ligeramente ácido" if 5.5 <= ph < 6.2 else ("Ácido" if ph < 5.5 else "Alcalino")),
             "depth_range": "0-30cm",
         },
+        "available_water_capacity_mm": total_awc_mm,
+        "organic_matter_pct": om_pct,
     }
 
 
@@ -330,6 +332,8 @@ def query_soilgrids(lat: float, lon: float, timeout_s: float = 4.0) -> dict[str,
                     "ph_class": "Neutro" if 6.2 <= ph <= 7.3 else ("Ligeramente ácido" if 5.5 <= ph < 6.2 else ("Ácido" if ph < 5.5 else "Alcalino")),
                     "depth_range": "0-30cm",
                 },
+                "available_water_capacity_mm": total_awc_mm,
+                "organic_matter_pct": om_pct,
             }
 
             try:
