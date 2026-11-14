@@ -1076,6 +1076,8 @@ footer {
 
   // ──── Simple map canvas ────
   initMap();
+  // Cargar análisis inicial automáticamente al abrir la página
+  analyze();
 
   function initMap() {
     const container = document.getElementById('mapContainer');
@@ -1553,21 +1555,15 @@ footer {
       climate = getLocalClimate(lat, lon);
       ranking = clientRankCrops(climate, month, cycle);
       rotation = clientBuildRotation(climate, numCycles, month, firstCrop);
+    } finally {
+      $btn.classList.remove('loading');
+      $btn.disabled = false;
     }
 
     showLoading(false);
     renderRanking(ranking);
     renderRotation(rotation);
     renderClimate(climate);
-    return;
-  }
-      showLoading(false);
-      showError(`No se pudo conectar con el servidor API (${API}). Asegurate de que el backend esté corriendo. ${err.message}`);
-      console.error(err);
-    } finally {
-      $btn.classList.remove('loading');
-      $btn.disabled = false;
-    }
   }
 
   // ──── UI helpers ────
