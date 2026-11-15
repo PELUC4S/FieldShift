@@ -61,6 +61,8 @@ def _generar_clima_sintetico(lat: float, lon: float, inicio: str, fin: str) -> p
         "temp_max_C": np.round(temp_max, 1),
         "precip_mm": monto_lluvia,
     }, index=fechas)
+    df.attrs["data_quality"] = "simulated"
+    df.attrs["source"] = "Simulación agroclimática local (no NASA POWER)"
     return df
 
 def obtener_clima(lat: float, lon: float, inicio: str, fin: str) -> pd.DataFrame:
@@ -84,12 +86,15 @@ def obtener_clima(lat: float, lon: float, inicio: str, fin: str) -> pd.DataFrame
         df = pd.DataFrame(datos)
         df.index = pd.to_datetime(df.index, format="%Y%m%d")
         df = df.replace(-999, float("nan"))
-        return df.rename(columns={
+        result = df.rename(columns={
             "T2M": "temp_media_C",
             "T2M_MIN": "temp_min_C",
             "T2M_MAX": "temp_max_C",
             "PRECTOTCORR": "precip_mm",
         })
+        result.attrs["data_quality"] = "observed"
+        result.attrs["source"] = "NASA POWER API"
+        return result
     except Exception as exc:
         logger.warning(
             f"No se pudo consultar NASA POWER directamente ({exc}). "
