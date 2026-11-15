@@ -387,12 +387,77 @@ def compute_crop_score(
     else:
         ph_rationale = f"✓ Acidez (pH {ph}): rango óptimo para desarrollo radicular y absorción de nutrientes."
 
-    water_rationale = f"Suelo {usda_text} (AWC: {awc_total_mm} mm en 0-60cm): reserva útil en perfil {soil_water_reserve_mm} mm (SMAP {root_pct}%)."
+    # Humedad superficial (cama de siembra 0-5 cm) para germinación
+    surf_pct = 50.0
+    if sat and "smap_soil_moisture" in sat:
+        surf_pct = float(sat["smap_soil_moisture"].get("surface_0_5cm", {}).get("percentage", 50.0))
+
+    seedbed_mod = 0.0
+    seedbed_rationale = None
+    if surf_pct < 18.0:
+        seedbed_mod = -4.0
+        seedbed_rationale = f"⚠️ Cama de siembra seca ({surf_pct}% AU en 0-5cm): riesgo en emergencia; sembrar profundo o esperar recarga (-4.0)."
+    elif surf_pct >= 90.0:
+        seedbed_mod = -3.0
+        seedbed_rationale = f"⚠️ Cama de siembra saturada ({surf_pct}% AU en 0-5cm): riesgo de anegamiento y asfixia de semilla (-3.0)."
+    elif surf_pct >= 55.0:
+        seedbed_rationale = f"✓ Cama de siembra óptima ({surf_pct}% AU en 0-5cm): excelente humedad para germinación uniforme."
+
+    # Textura y drenaje (Arena vs Arcilla)
+    sand_pct = 38.0
+    clay_pct = 22.0
+    if soil and "texture" in soil and isinstance(soil["texture"], dict):
+        sand_pct = float(soil["texture"].get("sand_pct", 38.0))
+        clay_pct = float(soil["texture"].get("clay_pct", 22.0))
+
+    tex_mod = 0.0
+    tex_rationale = None
+    water_cons = crop.get("water_consumption", "Medio").lower()
+    if sand_pct >= 65.0:
+        if crop_key == "mani":
+            tex_mod = 4.0
+            tex_rationale = f"✓ Textura arenosa ({sand_pct}% arena): ideal para penetración de clavos y arrancado en maní (+4.0)."
+        elif water_cons in ["alto", "muy alto"]:
+            tex_mod = -3.5
+            tex_rationale = f"⚠️ Textura arenosa ({sand_pct}% arena): drenaje excesivo; mayor vulnerabilidad a sequías cortas (-3.5)."
+    elif clay_pct >= 40.0:
+        if crop_key in ["mani", "papa"]:
+            tex_mod = -4.0
+            tex_rationale = f"⚠️ Textura arcillosa ({clay_pct}% arcilla): suelo pesado que dificulta desarrollo de tubérculos/vainas (-4.0)."
+
+    # Balance hídrico antecedente de 30 días (SPI-3)
+    spi_3 = 0.0
+    if sat and "water_balance_gpm_openet" in sat:
+        spi_3 = float(sat["water_balance_gpm_openet"].get("spi_3_months", 0.0))
+
+    spi_mod = 0.0
+    spi_rationale = None
+    if spi_3 <= -1.2:
+        if water_cons in ["alto", "muy alto"]:
+            spi_mod = -4.0
+            spi_rationale = f"⚠️ Sequía antecedente (SPI-3: {spi_3}): déficit acumulado; cultivo de alta demanda condicionado (-4.0)."
+        else:
+            spi_mod = -1.5
+            spi_rationale = f"⚠️ Déficit hídrico antecedente (SPI-3: {spi_3}): reserva del perfil condicionada."
+    elif spi_3 >= 1.0:
+        spi_rationale = f"✓ Balance hídrico favorable (SPI-3: {spi_3}): perfil hídrico antecedente con buena recarga."
+
+    water_rationale = f"Suelo {usda_text} (AWC: {awc_total_mm} mm en 0-60cm): reserva útil en perfil {soil_water_reserve_mm} mm (SMAP {root_pct}% AU)."
 
     # 5. Evaluación de Umbrales Críticos / Ley del Mínimo de Liebig
     frost_tol = crop.get("frost_tolerance", "media")
     is_frozen_soil = (plant_temp < 0.0) or ("permafrost" in usda_text.lower())
-    is_lethal_climate = (temp_fit <= 0.0) or (frost_pen >= 85.0 and frost_tol in ["nula", "baja"])
+
+    plant_month_frost = frost_by_month.get(str(planting_month), frost_by_month.get(planting_month, 0.0))
+    opt_min_temp = crop.get("optimal_temp_range_C", [15, 25])[0]
+
+    # Criterio letal: heladas en mes de siembra o ciclo con baja tolerancia, o temperatura por debajo de la base fisiológica
+    is_lethal_frost = (frost_tol == "nula" and (plant_month_frost >= 2.5 or frost_pen >= 65.0)) or \
+                      (frost_tol == "baja" and (plant_month_frost >= 5.0 or frost_pen >= 80.0))
+    is_lethal_temp = (temp_fit <= 0.0) or (plant_temp < 10.0 and (opt_min_temp >= 20.0 or frost_tol == "nula"))
+    is_lethal_climate = is_lethal_frost or is_lethal_temp
+
+    extra_notes = [n for n in [water_rationale, seedbed_rationale, tex_rationale, spi_rationale, soc_rationale, ph_rationale] if n]
 
     if is_frozen_soil or is_lethal_climate:
         base_climate_fitness = 0.0
@@ -401,19 +466,13 @@ def compute_crop_score(
         final_score = 0.0
         if is_frozen_soil:
             fatal_msg = f"❄️ Inviable por Suelo Congelado / Criosfera (T mes {planting_month}: {plant_temp}°C). Germinación e implantación biológicamente imposibles (Ley del Mínimo de Liebig)."
+        elif is_lethal_frost:
+            fatal_msg = f"❄️ Inviable por Riesgo Crítico de Heladas ({plant_month_frost} días/mes en siembra / Penalización: {round(frost_pen)}%). Daño por congelamiento letal para plántulas (Ley de Liebig)."
         else:
-            fatal_msg = f"❄️ Inviable por Régimen Térmico Letal (Aptitud térmica: 0% / Heladas: {round(frost_pen)}%). Cultivo biológicamente inviable en esta latitud y mes (Ley de Liebig)."
-        soil_rationale = [fatal_msg, water_rationale]
-        if soc_rationale:
-            soil_rationale.append(soc_rationale)
-        if ph_rationale:
-            soil_rationale.append(ph_rationale)
+            fatal_msg = f"❄️ Inviable por Régimen Térmico Letal (T mes {planting_month}: {plant_temp}°C / Aptitud térmica: {round(temp_fit)}%). Temperatura inferior a la base fisiológica del cultivo (Ley de Liebig)."
+        soil_rationale = [fatal_msg] + extra_notes
     else:
-        soil_rationale = [water_rationale]
-        if soc_rationale:
-            soil_rationale.append(soc_rationale)
-        if ph_rationale:
-            soil_rationale.append(ph_rationale)
+        soil_rationale = extra_notes
 
         # Modulación de aptitud climática mediante compuerta térmica (Thermal Gating):
         # La falta de temperatura adecuada no puede ser compensada linealmente por agua
@@ -428,7 +487,8 @@ def compute_crop_score(
 
         # Multiplicar por factor de ventana de siembra biológica y aplicar suelo
         base_score = base_climate_fitness * sowing_factor
-        soil_modifier = round((soc_mod + ph_mod) * sowing_factor, 1)
+        total_soil_modifier = soc_mod + ph_mod + seedbed_mod + tex_mod + spi_mod
+        soil_modifier = round(total_soil_modifier * sowing_factor, 1)
         final_score = max(0.0, min(100.0, base_score + soil_modifier))
 
     crop_name = crop_key.replace("_", " ").title()
