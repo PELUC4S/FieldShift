@@ -169,8 +169,47 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         fert_desc = "Bajo"
         drainage_desc = "Rápido"
 
-    # 5. Estepa Patagónica y Meseta Austral (-55.0 <= lat <= -39.0 y -74.0 <= lon <= -62.0)
-    elif -55.0 <= lat_r <= -39.0 and -74.0 <= lon_r <= -62.0:
+    # 5. Región Cuyo / Monte Árido y Precordillera (Mendoza, San Juan, San Luis precordillerano)
+    elif -37.0 <= lat_r <= -29.0 and -71.5 <= lon_r <= -66.0:
+        source_name = "ISRIC SoilGrids / Bioma Aridisol Cuyano - Precordillera"
+        clay_0_30 = round(11.0 + ((seed % 5) - 2) * 0.5, 1)
+        sand_0_30 = round(66.0 + ((seed % 7) - 3) * 1.1, 1)
+        silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
+        soc_g_kg = round(6.5 + ((seed % 5) - 2) * 0.3, 1)
+        ph = round(7.9 + ((seed % 5) - 2) * 0.1, 1)
+        cc_0_30, pmp_0_30 = 17.0, 9.0   # awc = 8.0% -> 24.0 mm
+        cc_30_60, pmp_30_60 = 16.0, 8.5 # awc = 7.5% -> 22.5 mm (total AWC ~ 46.5 mm)
+        fert_desc = "Bajo (Árido de regadío / Suelo aluvial esquelético)"
+        drainage_desc = "Rápido a moderado (permeable)"
+
+    # 6. Región NOA Árido / Valles Calchaquíes y Puna Andina
+    elif -29.0 <= lat_r <= -22.0 and -70.0 <= lon_r <= -65.0:
+        source_name = "ISRIC SoilGrids / Bioma Aridisol / Entisol Andino de Altura"
+        clay_0_30 = round(10.0 + ((seed % 5) - 2) * 0.5, 1)
+        sand_0_30 = round(72.0 + ((seed % 7) - 3) * 1.0, 1)
+        silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
+        soc_g_kg = round(5.0 + ((seed % 5) - 2) * 0.2, 1)
+        ph = round(8.1 + ((seed % 5) - 2) * 0.1, 1)
+        cc_0_30, pmp_0_30 = 14.5, 7.5   # awc = 7.0% -> 21.0 mm
+        cc_30_60, pmp_30_60 = 14.0, 7.5 # awc = 6.5% -> 19.5 mm (total AWC ~ 40.5 mm)
+        fert_desc = "Muy Bajo (Suelo pedregoso de altura / escasa MO)"
+        drainage_desc = "Rápido a excesivo"
+
+    # 7. Chaco Seco / Semiárido (Santiago del Estero, Chaco occidental, Formosa)
+    elif -29.0 <= lat_r <= -23.0 and -65.0 <= lon_r <= -59.0:
+        source_name = "ISRIC SoilGrids / Bioma Mollisol / Alfisol del Chaco Semiárido"
+        clay_0_30 = round(18.0 + ((seed % 5) - 2) * 0.7, 1)
+        sand_0_30 = round(48.0 + ((seed % 9) - 4) * 1.2, 1)
+        silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
+        soc_g_kg = round(13.0 + ((seed % 7) - 3) * 0.4, 1)
+        ph = round(7.0 + ((seed % 5) - 2) * 0.1, 1)
+        cc_0_30, pmp_0_30 = 26.0, 12.5  # awc = 13.5% -> 40.5 mm
+        cc_30_60, pmp_30_60 = 27.0, 13.5# awc = 13.5% -> 40.5 mm (total AWC ~ 81.0 mm)
+        fert_desc = "Medio a Bajo"
+        drainage_desc = "Moderado a bueno"
+
+    # 8. Estepa Patagónica y Meseta Austral (-55.0 <= lat <= -38.0 y -74.0 <= lon <= -62.0)
+    elif -55.0 <= lat_r <= -38.0 and -74.0 <= lon_r <= -62.0:
         source_name = "ISRIC SoilGrids / Bioma Aridisol de Estepa Patagónica"
         clay_0_30 = round(11.0 + ((seed % 5) - 2) * 0.5, 1)
         sand_0_30 = round(68.0 + ((seed % 7) - 3) * 1.1, 1)
@@ -182,7 +221,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         fert_desc = "Bajo (Estepa semiárida / Suelo esquelético)"
         drainage_desc = "Rápido a excesivo (baja retención)"
 
-    # 6. Mollisol / Cambisol Templado Estándar Internacional
+    # 9. Mollisol / Cambisol Templado Estándar Internacional
     else:
         source_name = "SoilGrids (ISRIC) / Mollisol Templado Estándar"
         clay_0_30 = 22.0
@@ -248,7 +287,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
     }
 
 
-def query_soilgrids(lat: float, lon: float, timeout_s: float = 4.0) -> dict[str, Any]:
+def query_soilgrids(lat: float, lon: float, timeout_s: float = 8.0) -> dict[str, Any]:
     """
     Consulta la API REST oficial de SoilGrids v2.0 (ISRIC) para las propiedades solicitadas:
     - clay, silt, sand
@@ -263,10 +302,13 @@ def query_soilgrids(lat: float, lon: float, timeout_s: float = 4.0) -> dict[str,
     cell_key = f"{round(lat, 2)}_{round(lon, 2)}"
     cache_file = CACHE_DIR / f"suelo_{cell_key}.json"
 
-    # Verificar caché local
+    # Verificar caché local (solo aceptar si proviene de la API real de ISRIC)
     if cache_file.exists():
         try:
-            return json.loads(cache_file.read_text(encoding="utf-8"))
+            cached_soil = json.loads(cache_file.read_text(encoding="utf-8"))
+            if not cached_soil.get("is_fallback", False):
+                return cached_soil
+            logger.info(f"Caché existente en {cache_file} es un fallback previo. Reintentando consulta oficial a ISRIC REST.")
         except Exception as e:
             logger.warning(f"Error al leer caché de suelo {cache_file}: {e}")
 
@@ -414,8 +456,6 @@ def query_soilgrids(lat: float, lon: float, timeout_s: float = 4.0) -> dict[str,
 
     # Fallback si hubo error, timeout o valores nulos
     fallback = _generate_soil_fallback(lat, lon)
-    try:
-        cache_file.write_text(json.dumps(fallback, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        logger.warning(f"Error escribiendo caché fallback de suelo: {e}")
+    fallback["warning"] = "Datos edafológicos estimados regionalmente por contingencia (ISRIC SoilGrids no respondió a tiempo)."
+    # NOTA CRÍTICA: NO guardamos el fallback en cache_file permanente para no bloquear futuras consultas exitosas a la API real
     return fallback

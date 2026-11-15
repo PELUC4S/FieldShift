@@ -2348,8 +2348,29 @@ footer {
       cc030 = 22.0; pmp030 = 9.5; cc3060 = 23.5; pmp3060 = 10.5;
       socVal = 11.0; phVal = 7.4; drainage = 'Rápido';
     }
-    // 5. Estepa Patagónica y Meseta Austral (-55 <= lat <= -39 y -74 <= lon <= -62)
-    else if (latR <= -39.0 && latR >= -55.0 && lonR <= -62.0 && lonR >= -74.0) {
+    // 5. Región Cuyo / Monte Árido y Precordillera (Mendoza, San Juan, San Luis precordillerano)
+    else if (latR <= -29.0 && latR >= -37.0 && lonR <= -66.0 && lonR >= -71.5) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Aridisol Cuyano - Precordillera';
+      usdaClass = 'Franco arenoso'; sandPct = 66.0; siltPct = 23.0; clayPct = 11.0;
+      cc030 = 17.0; pmp030 = 9.0; cc3060 = 16.0; pmp3060 = 8.5; // awc = 8.0% + 7.5% = 46.5 mm
+      socVal = 6.5; phVal = 7.9; drainage = 'Rápido a moderado (permeable)';
+    }
+    // 6. Región NOA Árido / Valles Calchaquíes y Puna Andina
+    else if (latR <= -22.0 && latR >= -29.0 && lonR <= -65.0 && lonR >= -70.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Aridisol / Entisol Andino de Altura';
+      usdaClass = 'Arenoso'; sandPct = 72.0; siltPct = 18.0; clayPct = 10.0;
+      cc030 = 14.5; pmp030 = 7.5; cc3060 = 14.0; pmp3060 = 7.5; // awc = 7.0% + 6.5% = 40.5 mm
+      socVal = 5.0; phVal = 8.1; drainage = 'Rápido a excesivo';
+    }
+    // 7. Chaco Seco / Semiárido (Santiago del Estero, Chaco occidental, Formosa)
+    else if (latR <= -23.0 && latR >= -29.0 && lonR <= -59.0 && lonR >= -65.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Mollisol / Alfisol del Chaco Semiárido';
+      usdaClass = 'Franco'; sandPct = 48.0; siltPct = 34.0; clayPct = 18.0;
+      cc030 = 26.0; pmp030 = 12.5; cc3060 = 27.0; pmp3060 = 13.5; // awc = 13.5% + 13.5% = 81.0 mm
+      socVal = 13.0; phVal = 7.0; drainage = 'Moderado a bueno';
+    }
+    // 8. Estepa Patagónica y Meseta Austral (-55 <= lat <= -38 y -74 <= lon <= -62)
+    else if (latR <= -38.0 && latR >= -55.0 && lonR <= -62.0 && lonR >= -74.0) {
       soilSrc = 'ISRIC SoilGrids / Bioma Aridisol de Estepa Patagónica';
       usdaClass = 'Franco arenoso'; sandPct = 68.0; siltPct = 21.0; clayPct = 11.0;
       cc030 = 16.0; pmp030 = 8.5; cc3060 = 15.0; pmp3060 = 8.0; // awc = 7.5% + 7.0% = 43.5 mm
@@ -2366,6 +2387,7 @@ footer {
 
     const soil = {
       source: soilSrc,
+      is_fallback: true,
       coordinates: { latitude: latR, longitude: lonR },
       texture: {
         usda_class: usdaClass,
@@ -2593,10 +2615,22 @@ footer {
     const phClass = acid.ph_class || acid.ph_classification || (phVal < 6.0 ? 'Ácido' : (phVal > 7.3 ? 'Alcalino' : 'Neutro'));
 
     const soilSrc = soil.source || 'ISRIC SoilGrids v2.0 (250m)';
+    const isSoilFallback = Boolean(soil.is_fallback);
 
     if ($satCellCoord) {
-      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})`;
+      const fallbackBadge = isSoilFallback ? ' <span style="font-size:0.72rem;background:#fff3cd;color:#856404;border:1px solid #ffeeba;padding:1px 5px;border-radius:4px;margin-left:4px">⚠️ Estimado regional</span>' : '';
+      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})${fallbackBadge}`;
     }
+
+    const rootPctVal = root.percentage != null ? Number(root.percentage) : 0;
+    let rootLabel = root.status;
+    if (!rootLabel) {
+      if (rootPctVal <= 5) rootLabel = 'Agotado';
+      else if (rootPctVal < 25) rootLabel = 'Déficit severo';
+      else if (rootPctVal < 50) rootLabel = 'Regular';
+      else rootLabel = 'Favorable';
+    }
+    const rootDescription = root.description || (rootPctVal < 25 ? 'Perfil radicular agotado; alto riesgo de déficit hídrico.' : 'Agua útil almacenada en perfil exploratorio.');
 
     $satGrid.innerHTML = `
       <div class="sat-card">
@@ -2614,12 +2648,12 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🌱 Humedad Radicular (0-100 cm)</span>
-          <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${root.status || (root.percentage < 25 ? 'Déficit severo' : 'Favorable')}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
+          <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${rootLabel}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
         </div>
         <div class="sat-card-val">
-          ${root.percentage ?? 0}% <small>AU (${root.volumetric_m3_m3 ?? 0} m³/m³)</small>
+          ${rootPctVal}% <small>AU (${root.volumetric_m3_m3 ?? 0} m³/m³)</small>
         </div>
-        <div class="sat-card-sub">${root.description || (root.percentage < 25 ? 'Perfil radicular agotado; alto riesgo de déficit hídrico.' : 'Agua útil almacenada en perfil exploratorio.')}</div>
+        <div class="sat-card-sub">${rootDescription}</div>
         <div class="sat-source">🛰️ NASA SMAP L4 Global (9 km)</div>
       </div>
 
@@ -2639,7 +2673,7 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🏔️ Suelo & Edafología ISRIC</span>
-          <span class="sat-pill optimal">${usdaClass}</span>
+          <span class="sat-pill ${isSoilFallback ? 'warning' : 'optimal'}">${isSoilFallback ? '⚠️ Estimado' : usdaClass}</span>
         </div>
         <div class="sat-card-val">
           AWC ${awcTotal} mm <small>(0-60 cm)</small>
@@ -2649,7 +2683,7 @@ footer {
           Retención: 0-30cm: <strong>${awc030} mm</strong> | 30-60cm: <strong>${awc3060} mm</strong><br>
           Fertilidad: SOC <strong>${socVal} g/kg</strong> (%MO: <strong>${omVal}%</strong> · ${fertLevel}) · pH: <strong>${phVal}</strong> (${phClass})
         </div>
-        <div class="sat-source">🌍 ${soilSrc}</div>
+        <div class="sat-source">${isSoilFallback ? '⚠️ Contingencia regional (ISRIC no disponible)' : `🌍 ${soilSrc}`}</div>
       </div>
 
       <div class="sat-card">
