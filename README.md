@@ -1,134 +1,134 @@
-# FieldShift 🌾 — Predicción Probabilística de Rotación de Cultivos
-### Desafío Oficial NASA Space Apps: *"Field Shift: Adapting Farms with NASA Data"*
+# FieldShift 🌾 — Probabilistic Crop Rotation Prediction
+### Official NASA Space Apps Challenge: *"Field Shift: Adapting Farms with NASA Data"*
 
-**FieldShift** es una plataforma web AgTech de soporte a la toma de decisiones que combina observaciones de la Tierra y APIs de la **NASA** (climatología, humedad de suelo superficial y radicular, balance hídrico satelital y vegetación) con un motor de inferencia agronómica para:
+**FieldShift** is an AgTech decision support web platform that combines Earth observations and **NASA** APIs (climatology, surface and root-zone soil moisture, satellite water balance, and vegetation) with an agronomic inference engine to:
 
-1. **Evaluar y rankear de forma probabilística (0-100%)** la aptitud de 15 cultivos agrícolas según las coordenadas GPS exactas del lote y la ventana de siembra.
-2. **Monitorear en tiempo real las condiciones satelitales del suelo:** Humedad superficial para cama de siembra ($0\text{--}5\text{ cm}$) y reserva en zona radicular ($0\text{--}100\text{ cm}$) con NASA SMAP, balance de 30 días con NASA GPM / OpenET e índice de vegetación NDVI con NASA HLS.
-3. **Optimizar la secuencia de rotación de cultivos**, permitiendo al usuario ingresar de forma opcional hasta **3 cultivos antecesores** para calcular el cultivo más recomendable en el siguiente ciclo (balance de nitrógeno, alternancia gramínea-leguminosa, corte de monocultivo y rotación de familias botánicas).
+1. **Probabilistically evaluate and rank (0–100%)** the suitability of 15 agricultural crops based on the field's exact GPS coordinates and the sowing window.
+2. **Monitor real-time satellite soil conditions:** Surface moisture for seedbed conditions ($0\text{--}5\text{ cm}$) and root-zone water storage ($0\text{--}100\text{ cm}$) via NASA SMAP, 30-day water balance via NASA GPM / OpenET, and NDVI vegetation index via NASA HLS.
+3. **Optimize the crop rotation sequence**, allowing users to optionally enter up to **3 predecessor crops** to calculate the most recommended crop for the next cycle (nitrogen balance, grass-legume alternation, monoculture disruption, and botanical family rotation).
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## 🏛️ System Architecture
 
 ```
 FieldShift/
 ├── backend/
-│   ├── main.py                  # API REST FastAPI + Servidor estático
+│   ├── main.py                  # FastAPI REST API + Static file server
 │   ├── analysis/
-│   │   └── indicators.py        # Cálculo de normales mensuales, heladas y anomalías de lluvia
+│   │   └── indicators.py        # Monthly normals, frost probability, and rainfall anomaly calculations
 │   ├── engine/
-│   │   ├── crop_ranker.py       # Motor probabilístico de fitness agroclimático y antecesores
-│   │   └── rotation.py          # Motor de rotación sucesoria multianual con memoria de historial
+│   │   ├── crop_ranker.py       # Probabilistic agroclimatic fitness and predecessor scoring engine
+│   │   └── rotation.py          # Multi-year succession rotation engine with history tracking
 │   ├── services/
-│   │   ├── nasa_harvester.py    # Servicio de telemetría NASA (SMAP, GPM IMERG, OpenET, HLS)
-│   │   ├── nasa_power.py        # Integración agroclimática NASA POWER (con fallback de contingencia)
-│   │   └── info_semillas.json   # Catálogo agronómico de 15 cultivos calibrados
+│   │   ├── nasa_harvester.py    # NASA telemetry service (SMAP, GPM IMERG, OpenET, HLS)
+│   │   ├── nasa_power.py        # NASA POWER agroclimatic integration (with contingency fallback)
+│   │   └── info_semillas.json   # Agronomic catalog of 15 calibrated crops
 │   └── data/
-│       ├── cache/               # Caché persistente JSON por celda geográfica (clima y satélite)
-│       └── mock_comparison.json # Datos de referencia de comparación
+│       ├── cache/               # Persistent JSON cache per spatial cell (climate and satellite)
+│       └── mock_comparison.json # Benchmark comparison data
 ├── frontend/
-│   └── index.html               # SPA interactiva moderna (Leaflet.js, OpenStreetMap, Esri Satélite)
-├── index.html                   # Versión raíz para despliegue directo en GitHub Pages
-├── requirements.txt             # Dependencias Python
-├── start.sh                     # Script de inicio rápido (puerto 8088)
+│   └── index.html               # Modern interactive SPA (Leaflet.js, OpenStreetMap, Esri Satellite)
+├── index.html                   # Root version for direct GitHub Pages deployment
+├── requirements.txt             # Python dependencies
+├── start.sh                     # Quickstart script (port 8088)
 └── README.md
 ```
 
 ---
 
-## 🛰️ Ecosistema de APIs y Fuentes de Datos Satelitales
+## 🛰️ Satellite APIs & Earth Observation Data Sources
 
-FieldShift se apoya en los repositorios abiertos del programa **NASA Earth Science Data Systems (EOSDIS)** y servicios asociados:
+FieldShift leverages open repositories from the **NASA Earth Science Data Systems (EOSDIS)** program and associated environmental services:
 
-| API / Fuente | Misión / Sensor | Variables Clave | Propósito Agronómico |
+| API / Data Source | Mission / Sensor | Key Variables | Agronomic Purpose |
 | :--- | :--- | :--- | :--- |
-| **NASA POWER API** | MERRA-2 / GEWEX (`power.larc.nasa.gov`) | `T2M`, `T2M_MIN`, `T2M_MAX`, `PRECTOTCORR`, `ALLSKY_SFC_SW_DWN` | Series históricas diarias de 20 años para calcular temperaturas normales, probabilidad de heladas agrometeorológicas ($T_{\min} \le 0^\circ\text{C}$), golpes de calor ($T_{\max} \ge 35^\circ\text{C}$) y variabilidad interanual de lluvias. |
-| **NASA SMAP L3** | SMAP Enhanced Radiometer (9 km) | Humedad de suelo superficial ($0\text{--}5\text{ cm}$) en $\text{m}^3/\text{m}^3$ y % | Diagnóstico en tiempo real de la cama de siembra para asegurar una germinación y emergencia uniforme. |
-| **NASA SMAP L4** | SMAP SPL4SMGP Global (9 km) | Humedad en zona radicular ($0\text{--}100\text{ cm}$) y anomalía $Z$-score | Disponibilidad de agua útil almacenada en el primer metro de suelo para sostener la evapotranspiración del cultivo. |
-| **NASA GPM IMERG** | GPM Core Observatory (0.1° / 10 km) | Precipitación diaria acumulada (`precipitationCal` en mm) | Medición de la oferta hídrica reciente (últimos 30 días) y cálculo del índice de sequía estacional `SPI-3`. |
-| **OpenET API** | Ensemble Landsat / Sentinel-2 (30 m) | Evapotranspiración Real ($ET_a$ en mm) | Cuantificación del consumo hídrico real del cultivo antecesor y balance hídrico neto ($P - ET_a$). |
-| **ISRIC SoilGrids v2.0** | Global Soil Information System (250 m) | Textura (`clay`, `silt`, `sand`), Retención hídrica (`wv0033`, `wv1500`), Materia Orgánica (`soc`) y Acidez (`phh2o`) | Cuantificación de Agua Disponible ($AWC_{0-30\text{cm}}$ y $AWC_{30-60\text{cm}}$), amortiguación de sequía invernal, fertilidad biológica de nitrógeno y aptitud edafológica del lote. |
-| **NASA HLS & ECOSTRESS** | Landsat 8/9, Sentinel-2 e ISS (30 m / 70 m) | Índice de Vegetación `NDVI` y Estrés Evaporativo de Canopia `ESI` | Estimación del vigor vegetativo foliar previo y volumen de rastrojo remanente en el lote. |
-| **OpenStreetMap & CartoDB** | OpenStreetMap Community / CARTO | Teselas raster cartográficas | Capa base interactiva para geolocalización ágil del lote. |
-| **Esri World Imagery** | Esri / Maxar / Earthstar Geographics | Ortofotos satelitales de alta resolución | Inspección visual satelital de parcelas y bordes del lote. |
-| **W3C Geolocation API** | Navegador Web (`navigator.geolocation`) | Latitud y Longitud GPS | Detección automática en un clic de la ubicación del productor en el campo. |
+| **NASA POWER API** | MERRA-2 / GEWEX (`power.larc.nasa.gov`) | `T2M`, `T2M_MIN`, `T2M_MAX`, `PRECTOTCORR`, `ALLSKY_SFC_SW_DWN` | 20-year daily historical time series to calculate monthly normals, agrometeorological frost probability ($T_{\min} \le 0^\circ\text{C}$), heat stress ($T_{\max} \ge 35^\circ\text{C}$), and interannual rainfall variability. |
+| **NASA SMAP L3** | SMAP Enhanced Radiometer (9 km) | Surface soil moisture ($0\text{--}5\text{ cm}$) in $\text{m}^3/\text{m}^3$ and % | Real-time seedbed diagnosis to ensure uniform germination and emergence. |
+| **NASA SMAP L4** | SMAP SPL4SMGP Global (9 km) | Root-zone soil moisture ($0\text{--}100\text{ cm}$) and $Z$-score anomaly | Plant-available water storage in the first meter of soil to sustain crop evapotranspiration. |
+| **NASA GPM IMERG** | GPM Core Observatory (0.1° / 10 km) | Daily accumulated precipitation (`precipitationCal` in mm) | Measurement of recent water supply (last 30 days) and seasonal drought index `SPI-3` computation. |
+| **OpenET API** | Ensemble Landsat / Sentinel-2 (30 m) | Actual Evapotranspiration ($ET_a$ in mm) | Quantification of actual water consumption by predecessor crops and net water balance ($P - ET_a$). |
+| **ISRIC SoilGrids v2.0** | Global Soil Information System (250 m) | Texture (`clay`, `silt`, `sand`), Water retention (`wv0033`, `wv1500`), Organic Matter (`soc`), and Acidity (`phh2o`) | Quantification of Available Water Capacity ($AWC_{0-30\text{cm}}$ and $AWC_{30-60\text{cm}}$), winter drought buffering, biological nitrogen fertility, and soil suitability. |
+| **NASA HLS & ECOSTRESS** | Landsat 8/9, Sentinel-2, and ISS (30 m / 70 m) | Vegetation Index `NDVI` and Canopy Evaporative Stress Index `ESI` | Estimation of prior foliar vegetative vigor and remaining stubble/residue volume in the field. |
+| **OpenStreetMap & CartoDB** | OpenStreetMap Community / CARTO | Cartographic raster tiles | Interactive basemap layer for fast, responsive field geolocation. |
+| **Esri World Imagery** | Esri / Maxar / Earthstar Geographics | High-resolution satellite orthophotos | Visual satellite inspection of farm parcels and field boundaries. |
+| **W3C Geolocation API** | Web Browser (`navigator.geolocation`) | GPS Latitude and Longitude | One-click automatic detection of the farmer's location in the field. |
 
 ---
 
-## 📡 Endpoints de la API REST (Backend FastAPI)
+## 📡 REST API Endpoints (FastAPI Backend)
 
-La API corre por defecto en `http://localhost:8088`. La documentación interactiva Swagger se encuentra en `/docs`.
+The API runs by default on `http://localhost:8088`. Interactive Swagger documentation is available at `/docs`.
 
-### 1. Analítica Integral y Satelital
-* **`GET /api/v1/field-analytics`**: Retorna el contrato integral de analítica del lote: metadatos geográficos, perfil de suelo, telemetría NASA (SMAP, GPM, OpenET, HLS), historial de antecesores, ranking y rotación sucesoria recomendada con justificación agronómica.  
-  *Query params:* `lat`, `lon`, `planting_month` (1-12), `cycle_months` (2-8), `num_cycles` (1-10), `previous_crops` (ej. `soja,trigo,maiz`).
-* **`GET /api/v1/satellite-readings`**: Lecturas satelitales en tiempo real de humedad de suelo, balance hídrico, sequía `SPI-3` y vigor vegetal por celda espacial con caché local.  
+### 1. Comprehensive Analytics & Satellite Telemetry
+* **`GET /api/v1/field-analytics`**: Returns the complete field analytics contract: geographic metadata, soil profile, NASA telemetry (SMAP, GPM, OpenET, HLS), predecessor history, ranking, and recommended succession rotation with agronomic justification.  
+  *Query params:* `lat`, `lon`, `planting_month` (1-12), `cycle_months` (2-8), `num_cycles` (1-10), `previous_crops` (e.g. `soja,trigo,maiz`).
+* **`GET /api/v1/satellite-readings`**: Real-time satellite readings for soil moisture, water balance, `SPI-3` drought index, and vegetative vigor per spatial cell with local caching.  
   *Query params:* `lat`, `lon`.
-* **`GET /api/v1/soil-profile`**: Perfil edafológico normalizado de ISRIC SoilGrids v2.0 (textura USDA, porcentajes de arcilla/limo/arena en $0\text{--}30\text{ cm}$, retención hídrica $AWC$ en $0\text{--}30\text{ cm}$ y $30\text{--}60\text{ cm}$, carbono orgánico $SOC$ y $\text{pH}$).  
+* **`GET /api/v1/soil-profile`**: Normalized ISRIC SoilGrids v2.0 pedological profile (USDA texture class, clay/silt/sand percentages in $0\text{--}30\text{ cm}$, available water capacity $AWC$ in $0\text{--}30\text{ cm}$ and $30\text{--}60\text{ cm}$, soil organic carbon $SOC$, and $\text{pH}$).  
   *Query params:* `lat`, `lon`.
 
-### 2. Predicción de Cultivos y Rotación
-* **`GET /api/v1/ranking`**: Ranking probabilístico (0 a 100%) de las 15 semillas evaluando clima y bonificaciones de rotación sucesoria contra los cultivos anteriores.  
+### 2. Crop Prediction & Rotation Sequence
+* **`GET /api/v1/ranking`**: Probabilistic ranking (0 to 100%) for the 15 supported crops evaluating climate suitability and succession rotation bonuses against predecessor crops.  
   *Query params:* `lat`, `lon`, `planting_month`, `cycle_months`, `previous_crops`.
-* **`POST /api/v1/rotation`**: Genera la secuencia secuencial de rotación multi-ciclo optimizada agronómicamente (gramínea $\leftrightarrow$ leguminosa, reposición de N, corte de monocultivo).  
+* **`POST /api/v1/rotation`**: Generates an agronomically optimized multi-cycle rotation sequence (grass $\leftrightarrow$ legume alternation, N replenishment, monoculture disruption).  
   *JSON Body:* `{"latitude": -31.42, "longitude": -64.18, "start_month": 10, "num_cycles": 3, "previous_crops": ["soja", "trigo"]}`.
-* **`GET /api/v1/next-crop`**: Sugerencia directa del mejor cultivo sucesor inmediato tras un antecesor cosechado específico.  
+* **`GET /api/v1/next-crop`**: Direct recommendation for the immediate successor crop following a specific harvested predecessor.  
   *Query params:* `predecessor`, `planting_month`, `lat`, `lon`, `cycle_months`.
 
-### 3. Catálogo y Climatología
-* **`GET /api/v1/crops`**: Catálogo completo de las 15 semillas agronómicas con sus requerimientos térmicos, hídricos, tolerancia a helada/calor, efectos en nitrógeno y compatibilidades.
-* **`GET /api/v1/climate`** o **`GET /climate`**: Indicadores agroclimáticos históricos de 20 años de NASA POWER (temperaturas normales, lluvia anual, heladas agrometeorológicas, golpes de calor y lecturas satelitales integradas).  
+### 3. Crop Catalog & Climatology
+* **`GET /api/v1/crops`**: Full catalog of the 15 agronomic seeds with thermal and hydric requirements, frost/heat tolerance, soil nitrogen effects, and compatibility rules.
+* **`GET /api/v1/climate`** or **`GET /climate`**: 20-year NASA POWER historical agroclimatic indicators (normal temperatures, annual rainfall, agrometeorological frost days, heat stress days, and integrated satellite readings).  
   *Query params:* `lat`, `lon`.
-* **`POST /compare`**: Simulación comparativa de escenarios de rotación y prioridades agronómicas.
-* **`GET /health`**: Verificación de salud y estado operativo del servicio (`{"status": "ok"}`).
+* **`POST /compare`**: Comparative simulation of rotation scenarios and agronomic priorities.
+* **`GET /health`**: Health check and operational status of the service (`{"status": "ok"}`).
 
 ---
 
-## 🌾 Catálogo Agronómico de Cultivos Soportados
+## 🌾 Agronomic Catalog of Supported Crops
 
-El sistema evalúa 15 especies agrícolas estratégicas calibradas con datos del INTA y literatura agronómica:
+The system evaluates 15 strategic agricultural crops calibrated with INTA data and agronomic literature:
 
-* **Gramíneas / Cereales:** Maíz (`maiz`), Trigo (`trigo`), Sorgo (`sorgo`), Cebada (`cebada`), Avena (`avena`), Centeno de Cobertura (`centeno_cobertura`).
-* **Leguminosas / Fijadoras de N:** Soja (`soja`), Garbanzo (`garbanzo`), Maní (`mani`), Arveja (`arveja`), Vicia (`vicia`).
-* **Oleaginosas y Especiales:** Girasol (`girasol`), Colza / Canola (`colza`), Algodón (`algodon`), Papa (`papa`).
+* **Grasses / Cereals:** Corn (`maiz`), Wheat (`trigo`), Sorghum (`sorgo`), Barley (`cebada`), Oats (`avena`), Cover Rye (`centeno_cobertura`).
+* **Legumes / N-Fixers:** Soybean (`soja`), Chickpea (`garbanzo`), Peanut (`mani`), Pea (`arveja`), Vetch (`vicia`).
+* **Oilseeds & Specialty Crops:** Sunflower (`girasol`), Rapeseed / Canola (`colza`), Cotton (`algodon`), Potato (`papa`).
 
 ---
 
-## 💻 Puesta en Marcha en Local
+## 💻 Local Setup & Installation
 
-### Requisitos
-* Python 3.9 o superior.
+### Requirements
+* Python 3.9 or higher.
 
-### Pasos
-1. **Clonar el repositorio:**
+### Quick Start
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/PELUC4S/FieldShift.git
    cd FieldShift
    ```
 
-2. **Instalar dependencias:**
+2. **Install dependencies:**
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
-3. **Iniciar el servidor:**
+3. **Start the server:**
    ```bash
    ./start.sh
-   # O manualmente:
+   # Or manually:
    uvicorn backend.main:app --host 127.0.0.1 --port 8088 --reload
    ```
 
-4. **Acceder en el navegador:**
-   * **Aplicación Web:** [http://localhost:8088](http://localhost:8088)
-   * **Documentación Interactiva Swagger:** [http://localhost:8088/docs](http://localhost:8088/docs)
+4. **Open in your browser:**
+   * **Web Application:** [http://localhost:8088](http://localhost:8088)
+   * **Interactive Swagger Docs:** [http://localhost:8088/docs](http://localhost:8088/docs)
 
 ---
 
-## 🌐 Despliegue en GitHub Pages (Modo Standalone)
+## 🌐 GitHub Pages Deployment (Standalone Mode)
 
-FieldShift cuenta con arquitectura de **conmutación transparente**:
-* Si el backend FastAPI local no está activo (por ejemplo, en un entorno de demostración estático), el frontend activa automáticamente su **motor agroclimático y satelital integrado en JavaScript** con normales calibradas y modelos físicos locales.
-* **Demo en Vivo:** [https://peluc4s.github.io/FieldShift/](https://peluc4s.github.io/FieldShift/)
+FieldShift features a seamless fallback architecture:
+* If the local FastAPI backend is not active (for example, in a static demo environment), the frontend automatically activates its **built-in JavaScript agroclimatic and satellite engine** with calibrated normals and local physical models.
+* **Live Demo:** [https://cultivito.onrender.com/](https://cultivito.onrender.com/)
