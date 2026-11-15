@@ -2204,32 +2204,92 @@ footer {
           reasons = ['Primer cultivo seleccionado por el usuario'];
         }
       } else {
-        let bestScore = -999;
-        const recent = [...historyList, ...sequence.map(s => s.crop_key)].slice(-3);
-        for (const k in validCrops) {
-          const cr = validCrops[k];
-          if (prevCrop && !clientTimingCompatible(prevCrop, cr)) continue;
-          const pM = isSummer ? (cr.sowing_months.find(m => summerMonths.includes(m)) || 10) : (cr.sowing_months.find(m => winterMonths.includes(m)) || 5);
-          const cM = Math.floor((cr.cycle_days_mid || 120) / 30) || 4;
-          const sc = computeLocalCropScore(k, cr, climate, pM, cM);
-          const compat = clientPredecessorCompatibility(k, cr, prevKey, prevCrop);
-          let b = compat.bonus;
-          const r = [...compat.reasons];
-          if (recent.includes(k)) {
-            b -= 7;
-            r.push('✗ Cultivo en rotación o historial reciente');
+        // Buscador de mejor candidato con criterio de viabilidad biológica real (> 0)
+        function findBestCandidate(candidatesMap, allowAnyMonth = false) {
+          let bScore = 0.0;
+          let bChoice = null;
+          const recent = [...historyList, ...sequence.map(s => s.crop_key)].slice(-3);
+
+          for (const k in candidatesMap) {
+            const cr = candidatesMap[k];
+            let pM, sc;
+            if (allowAnyMonth) {
+              let bestM = null, maxSc = -1, bestScObj = null;
+              for (const m of (cr.sowing_months || [])) {
+                const scM = computeLocalCropScore(k, cr, climate, m, Math.floor((cr.cycle_days_mid || 120) / 30) || 4);
+                if (scM.score > maxSc) {
+                  maxSc = scM.score;
+                  bestM = m;
+                  bestScObj = scM;
+                }
+              }
+              if (maxSc <= 0.0 || !bestM || !bestScObj) continue;
+              pM = bestM;
+              sc = bestScObj;
+            } else {
+              pM = isSummer ? (cr.sowing_months.find(m => summerMonths.includes(m)) || 10) : (cr.sowing_months.find(m => winterMonths.includes(m)) || 5);
+              sc = computeLocalCropScore(k, cr, climate, pM, Math.floor((cr.cycle_days_mid || 120) / 30) || 4);
+            }
+
+            // CRITERIO DE SUPERVIVENCIA: Descartar categóricamente cultivos inviables (Liebig / frío extremo)
+            if (sc.score <= 0.0) continue;
+
+            if (prevCrop && !clientTimingCompatible(prevCrop, cr)) continue;
+
+            const compat = clientPredecessorCompatibility(k, cr, prevKey, prevCrop);
+            let b = compat.bonus;
+            const r = [...compat.reasons];
+            if (recent.includes(k)) {
+              b -= 7;
+              r.push('✗ Cultivo en rotación o historial reciente');
+            }
+            const tot = Math.max(0, sc.score + b);
+            if (tot > bScore) {
+              bScore = tot;
+              bChoice = {
+                key: k,
+                crop: cr,
+                baseScore: sc,
+                rotBonus: b,
+                reasons: r,
+                plantM: pM,
+                cycleM: Math.floor((cr.cycle_days_mid || 120) / 30) || 4
+              };
+            }
           }
-          const tot = sc.score <= 0.0 ? 0.0 : Math.max(0, sc.score + b);
-          if (tot > bestScore) {
-            bestScore = tot;
-            chosenKey = k;
-            chosenCrop = cr;
-            baseScore = sc;
-            rotBonus = b;
-            reasons = r;
-            plantM = pM;
-            cycleM = cM;
-          }
+          return bChoice;
+        }
+
+        // 1. Intentar con cultivos del slot estacional
+        let match = findBestCandidate(validCrops, false);
+
+        // 2. Si ningún cultivo estival sobrevive (ej. estepa patagónica), buscar en el catálogo completo cultivos rústicos viables
+        if (!match) {
+          match = findBestCandidate(CROPS_DB, true);
+        }
+
+        if (match) {
+          chosenKey = match.key;
+          chosenCrop = match.crop;
+          baseScore = match.baseScore;
+          rotBonus = match.rotBonus;
+          reasons = match.reasons;
+          plantM = match.plantM;
+          cycleM = match.cycleM;
+        } else {
+          chosenKey = 'barbecho_cobertura';
+          chosenCrop = {
+            type: 'Barbecho / Cobertura',
+            family: 'Conservación',
+            water_consumption: 'Bajo',
+            cycle_days_mid: 120,
+            soil_nitrogen_effect: 'neutral'
+          };
+          baseScore = { score: 85.0, breakdown: {} };
+          rotBonus = 0;
+          reasons = ['Práctica recomendada: descanso y acumulación de agua útil en el perfil para zona semiárida fría'];
+          plantM = isSummer ? 10 : 5;
+          cycleM = 4;
         }
       }
 
@@ -2269,13 +2329,55 @@ footer {
 
     const avgScore = sequence.length ? sequence.reduce((s, c) => s + c.adjusted_score, 0) / sequence.length : 0;
     const fams = [...new Set(sequence.map(s => s.family))].sort();
-    const benefits = [
-      'Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes sintéticos.',
-      `Diversificación biológica (${fams.join(', ')}): corta ciclos de patógenos edáficos y malezas tolerantes.`,
-      'Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión.',
-      'Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.'
-    ];
-    const warnings = ['Monitorear condiciones hídricas de la cama de siembra durante la ventana de implantación.'];
+
+    const latVal = (climate && climate.location && (climate.location.latitude ?? climate.location.lat)) ?? 0;
+    const isPatag = latVal <= -38.0;
+    const isMarginal = avgScore < 35.0;
+
+    const viableCrops = sequence.filter(s => s.base_score >= 10.0 && s.crop_key !== 'barbecho_cobertura');
+
+    const benefits = [];
+    if (isPatag || isMarginal) {
+      if (viableCrops.some(s => s.nitrogen_effect === 'fijador')) {
+        benefits.append ? benefits.append('...') : benefits.push('Fijación biológica de N en suelos pobres: el uso de leguminosas rústicas (vicia) aporta nitrógeno orgánico en aridisoles con bajo contenido de materia orgánica (< 1.5% MO).');
+      }
+      if (viableCrops.some(s => s.crop_type.includes('Gramínea'))) {
+        benefits.push('Mitigación de erosión eólica: el rastrojo y cobertura permanente de gramíneas rústicas protege la superficie contra la voladura por vientos fuertes de la estepa.');
+      }
+      if (new Set(viableCrops.map(s => s.family)).size >= 2) {
+        benefits.push(`Diversificación biológica (${[...new Set(viableCrops.map(s => s.family))].sort().join(', ')}): ruptura de ciclos de plagas y cobertura adaptada al frío.`);
+      }
+      if (sequence.some(s => s.crop_key === 'barbecho_cobertura')) {
+        benefits.push('Conservación de agua en el perfil: el descanso estacional acumula la escasa precipitación para el siguiente ciclo.');
+      }
+      if (!benefits.length) {
+        benefits.push('Manejo conservacionista: secuencia orientada a la protección del recurso suelo y la captación de agua en zona árida.');
+      }
+    } else {
+      if (viableCrops.some(s => s.nitrogen_effect === 'fijador')) {
+        benefits.push('Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes sintéticos.');
+      }
+      if (fams.length >= 2) {
+        benefits.push(`Diversificación biológica (${fams.join(', ')}): corta ciclos de patógenos edáficos y malezas tolerantes.`);
+      }
+      if (viableCrops.some(s => s.crop_type.includes('Gramínea'))) {
+        benefits.push('Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión.');
+      }
+      if (viableCrops.some(s => ['girasol', 'colza', 'papa'].includes(s.crop_key))) {
+        benefits.push('Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.');
+      }
+      if (!benefits.length) {
+        benefits.push('Alternancia equilibrada entre ciclos de siembra y descansos estacionales.');
+      }
+    }
+
+    const warnings = [];
+    if (isPatag || isMarginal) {
+      warnings.push('Zona agroecológica marginal / Estepa Patagónica a secano: viabilidad agronómica baja a moderada. Rotación recomendada estrictamente para cobertura, forrajeo rústico o conservación del suelo, no para cosecha comercial de grano.');
+      warnings.push('Descarte de cultivos estivales C4: maíz, soja y girasol resultan biológicamente inviables debido a temperaturas medias insuficientes y heladas letales durante el ciclo.');
+    } else {
+      warnings.push('Monitorear condiciones hídricas de la cama de siembra durante la ventana de implantación.');
+    }
 
     return {
       num_cycles: numCycles,

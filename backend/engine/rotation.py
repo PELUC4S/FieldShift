@@ -246,6 +246,7 @@ def build_rotation(
             )
             if base_score["score"] <= 0.0:
                 rotation_bonus = 0.0
+                compat_reasons = [f"⚠️ Cultivo biológicamente inviable en este período ({chosen_key}): daño letal por frío/heladas o suelo inadecuado (Ley de Liebig)"]
             elif prev_crop and prev_key:
                 rot_bonus, compat_reasons = predecessor_compatibility(
                     chosen_key, chosen_crop, prev_key, prev_crop
@@ -258,61 +259,93 @@ def build_rotation(
                 rotation_bonus = 0.0
                 compat_reasons = ["Primer cultivo seleccionado por el usuario"]
         else:
-            # Rankear cultivos válidos y elegir el mejor considerando rotación
-            best_choice: dict | None = None
-            best_total_score = -999.0
+            # Función auxiliar para buscar el mejor cultivo que sea realmente viable (> 0)
+            def _find_best_candidate(crop_dict: dict[str, dict], allow_any_viable_month: bool = False) -> dict | None:
+                best = None
+                best_score = 0.0  # Solo considerar cultivos con viabilidad biológica real > 0
 
-            for key, crop in valid_crops.items():
-                planting_m = _determine_planting_month(crop, is_summer_slot)
-                cycle_m = crop["cycle_days_mid"] // 30 or 4
+                for key, crop in crop_dict.items():
+                    if allow_any_viable_month:
+                        best_m = None
+                        best_sc = -1.0
+                        best_score_obj = None
+                        for m in crop.get("sowing_months", []):
+                            sc_m = compute_crop_score(key, crop, climate_data, m, crop["cycle_days_mid"] // 30 or 4, weights)
+                            if sc_m["score"] > best_sc:
+                                best_sc = sc_m["score"]
+                                best_m = m
+                                best_score_obj = sc_m
+                        if best_sc <= 0.0 or best_m is None or best_score_obj is None:
+                            continue
+                        p_m = best_m
+                        score_data = best_score_obj
+                    else:
+                        p_m = _determine_planting_month(crop, is_summer_slot)
+                        score_data = compute_crop_score(key, crop, climate_data, p_m, crop["cycle_days_mid"] // 30 or 4, weights)
 
-                # Verificar compatibilidad de timing con antecesor
-                if prev_crop and not _timing_compatible(prev_crop, crop):
-                    continue
+                    # CRITERIO DE SUPERVIVENCIA: Si el cultivo tiene score 0 (letal por Liebig), se descarta categóricamente
+                    if score_data["score"] <= 0.0:
+                        continue
 
-                score_data = compute_crop_score(
-                    key, crop, climate_data, planting_m, cycle_m, weights
-                )
-                rot_bonus, reasons = predecessor_compatibility(
-                    key, crop, prev_key, prev_crop
-                )
+                    # Verificar compatibilidad de timing con antecesor
+                    if prev_crop and not _timing_compatible(prev_crop, crop):
+                        continue
 
-                # Penalización por repetición en la secuencia o historial (fomentar diversidad plurianual)
-                recent_crops = history_list + [e["crop_key"] for e in sequence]
-                recency_penalty = 0.0
-                if key in recent_crops[-3:]:
-                    recency_penalty = 7.0
-                    reasons.append("✗ Cultivo utilizado recientemente en la rotación o historial (desincentivo a la repetición)")
+                    rot_bonus, reasons = predecessor_compatibility(key, crop, prev_key, prev_crop)
 
-                if score_data["score"] <= 0.0:
-                    rot_bonus = 0.0
+                    # Penalización por repetición en la secuencia o historial
+                    recent_crops = history_list + [e["crop_key"] for e in sequence]
                     recency_penalty = 0.0
-                    total = 0.0
-                else:
+                    if key in recent_crops[-3:]:
+                        recency_penalty = 7.0
+                        reasons.append("✗ Cultivo utilizado recientemente en la rotación (desincentivo a la repetición)")
+
                     total = max(0.0, score_data["score"] + rot_bonus - recency_penalty)
 
-                if total > best_total_score:
-                    best_total_score = total
-                    best_choice = {
-                        "key": key,
-                        "crop": crop,
-                        "score_data": score_data,
-                        "rotation_bonus": rot_bonus - recency_penalty,
-                        "reasons": reasons,
-                        "planting_m": planting_m,
-                        "cycle_m": cycle_m,
-                    }
+                    if total > best_score:
+                        best_score = total
+                        best = {
+                            "key": key,
+                            "crop": crop,
+                            "score_data": score_data,
+                            "rotation_bonus": rot_bonus - recency_penalty,
+                            "reasons": reasons,
+                            "planting_m": p_m,
+                            "cycle_m": crop["cycle_days_mid"] // 30 or 4,
+                        }
+                return best
 
+            # 1. Intentar con los cultivos válidos para el slot estacional
+            best_choice = _find_best_candidate(valid_crops, allow_any_viable_month=False)
+
+            # 2. Si ningún cultivo de la estación es viable (ej. verano patagónico donde maíz/soja tienen score 0),
+            # buscar en el catálogo completo cualquier cultivo rústico viable
             if best_choice is None:
-                continue
+                best_choice = _find_best_candidate(crops, allow_any_viable_month=True)
 
-            chosen_key = best_choice["key"]
-            chosen_crop = best_choice["crop"]
-            base_score = best_choice["score_data"]
-            rotation_bonus = best_choice["rotation_bonus"]
-            compat_reasons = best_choice["reasons"]
-            planting_m = best_choice["planting_m"]
-            cycle_m = best_choice["cycle_m"]
+            # 3. Si aún así no hay cultivo viable para este slot, descanso/barbecho
+            if best_choice is None:
+                chosen_key = "barbecho_cobertura"
+                chosen_crop = {
+                    "type": "Barbecho / Cobertura",
+                    "family": "Conservación",
+                    "water_consumption": "Bajo",
+                    "cycle_days_mid": 120,
+                    "soil_nitrogen_effect": "neutral",
+                }
+                base_score = {"score": 85.0, "breakdown": {}}
+                rotation_bonus = 0.0
+                compat_reasons = ["Práctica recomendada: descanso y acumulación de agua útil en el perfil para zona semiárida fría"]
+                planting_m = 10 if is_summer_slot else 5
+                cycle_m = 4
+            else:
+                chosen_key = best_choice["key"]
+                chosen_crop = best_choice["crop"]
+                base_score = best_choice["score_data"]
+                rotation_bonus = best_choice["rotation_bonus"]
+                compat_reasons = best_choice["reasons"]
+                planting_m = best_choice["planting_m"]
+                cycle_m = best_choice["cycle_m"]
 
         # Calcular mes de cosecha estimado
         harvest_month = ((planting_m - 1 + (chosen_crop["cycle_days_mid"] // 30)) % 12) + 1
@@ -361,27 +394,53 @@ def build_rotation(
         for e in sequence
     )
 
-    # Beneficios dinámicos agronómicos
-    benefits: list[str] = []
-    if any(e["nitrogen_effect"] == "fijador" for e in sequence):
-        benefits.append("Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes de síntesis.")
-    if len(families_used) >= 2:
-        benefits.append(f"Diversificación biológica ({', '.join(sorted(families_used))}): corta ciclos de patógenos edáficos (ej. Fusarium) y malezas difíciles.")
-    if any("Gramínea" in e["crop_type"] for e in sequence):
-        benefits.append("Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión hídrica y eólica.")
-    if any(e["crop_key"] in ["girasol", "colza", "papa"] for e in sequence):
-        benefits.append("Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.")
-    if not benefits:
-        benefits.append("Alternancia equilibrada entre ciclos de siembra y descansos estacionales.")
+    # Contexto geográfico y agroecológico
+    lat = (climate_data.get("location") or {}).get("latitude")
+    if lat is None:
+        lat = (climate_data.get("location") or {}).get("lat", 0.0)
+    is_patagonia = float(lat) <= -38.0
+    avg_score = sum(e["adjusted_score"] for e in sequence) / len(sequence) if sequence else 0
+    is_marginal = avg_score < 35.0
 
-    # Advertencias agronómicas
+    # Beneficios dinámicos agronómicos contextualizados
+    benefits: list[str] = []
+    # Filtrar cultivos que sean biológicamente viables (> 10%) para no adjudicar beneficios a cultivos fallidos
+    viable_crops = [e for e in sequence if e.get("base_score", 0) >= 10.0 and e.get("crop_key") != "barbecho_cobertura"]
+
+    if is_patagonia or is_marginal:
+        if any(e["nitrogen_effect"] == "fijador" for e in viable_crops):
+            benefits.append("Fijación biológica de N en suelos pobres: el uso de leguminosas rústicas (vicia) aporta nitrógeno orgánico en aridisoles con bajo contenido de materia orgánica (< 1.5% MO).")
+        if any("Gramínea" in e["crop_type"] for e in viable_crops):
+            benefits.append("Mitigación de erosión eólica: el rastrojo y cobertura permanente de gramíneas rústicas protege la superficie contra la voladura por vientos fuertes de la estepa.")
+        if len(set(e["family"] for e in viable_crops)) >= 2:
+            benefits.append(f"Diversificación biológica ({', '.join(sorted(set(e['family'] for e in viable_crops)))}): ruptura de ciclos de plagas y cobertura adaptada al frío.")
+        if any(e.get("crop_key") == "barbecho_cobertura" for e in sequence):
+            benefits.append("Conservación de agua en el perfil: el descanso estacional acumula la escasa precipitación para el siguiente ciclo.")
+        if not benefits:
+            benefits.append("Manejo conservacionista: secuencia orientada a la protección del recurso suelo y la captación de agua en zona árida.")
+    else:
+        if any(e["nitrogen_effect"] == "fijador" for e in viable_crops):
+            benefits.append("Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes de síntesis.")
+        if len(families_used) >= 2:
+            benefits.append(f"Diversificación biológica ({', '.join(sorted(families_used))}): corta ciclos de patógenos edáficos (ej. Fusarium) y malezas difíciles.")
+        if any("Gramínea" in e["crop_type"] for e in viable_crops):
+            benefits.append("Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión hídrica y eólica.")
+        if any(e["crop_key"] in ["girasol", "colza", "papa"] for e in viable_crops):
+            benefits.append("Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.")
+        if not benefits:
+            benefits.append("Alternancia equilibrada entre ciclos de siembra y descansos estacionales.")
+
+    # Advertencias agronómicas contextualizadas
     warnings: list[str] = []
-    if nitrogen_balance < 0:
+    if is_patagonia or is_marginal:
+        warnings.append("Zona agroecológica marginal / Estepa Patagónica a secano: viabilidad agronómica baja a moderada. Rotación recomendada estrictamente para cobertura, forrajeo rústico o conservación del suelo, no para cosecha comercial de grano.")
+        warnings.append("Descarte de cultivos estivales C4: maíz, soja y girasol resultan biológicamente inviables debido a temperaturas medias insuficientes y heladas letales durante el ciclo.")
+    if nitrogen_balance < 0 and not (is_patagonia or is_marginal):
         warnings.append("Balance neto de nitrógeno negativo: prever fertilización estratégica en los cultivos demandantes.")
     high_water_count = sum(1 for e in sequence if e.get("water_consumption") == "Alto")
     if high_water_count >= 2:
         warnings.append("Alta demanda hídrica acumulada: verificar recarga del perfil de suelo antes de la siembra.")
-    if len(families_used) == 1:
+    if len(families_used) == 1 and len(sequence) > 1:
         warnings.append("Baja diversidad botánica: rotar familias para evitar incremento de plagas específicas.")
     if not warnings:
         warnings.append("Monitorear condiciones hídricas de la cama de siembra durante la ventana de implantación.")
