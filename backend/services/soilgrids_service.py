@@ -169,7 +169,20 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
         fert_desc = "Bajo"
         drainage_desc = "Rápido"
 
-    # 5. Mollisol / Cambisol Templado Estándar Internacional
+    # 5. Estepa Patagónica y Meseta Austral (-55.0 <= lat <= -39.0 y -74.0 <= lon <= -62.0)
+    elif -55.0 <= lat_r <= -39.0 and -74.0 <= lon_r <= -62.0:
+        source_name = "ISRIC SoilGrids / Bioma Aridisol de Estepa Patagónica"
+        clay_0_30 = round(11.0 + ((seed % 5) - 2) * 0.5, 1)
+        sand_0_30 = round(68.0 + ((seed % 7) - 3) * 1.1, 1)
+        silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
+        soc_g_kg = round(7.5 + ((seed % 5) - 2) * 0.3, 1)
+        ph = round(7.2 + ((seed % 5) - 2) * 0.1, 1)
+        cc_0_30, pmp_0_30 = 16.0, 8.5   # awc = 7.5% -> 22.5 mm
+        cc_30_60, pmp_30_60 = 15.0, 8.0 # awc = 7.0% -> 21.0 mm (total AWC ~ 43.5 mm)
+        fert_desc = "Bajo (Estepa semiárida / Suelo esquelético)"
+        drainage_desc = "Rápido a excesivo (baja retención)"
+
+    # 6. Mollisol / Cambisol Templado Estándar Internacional
     else:
         source_name = "SoilGrids (ISRIC) / Mollisol Templado Estándar"
         clay_0_30 = 22.0

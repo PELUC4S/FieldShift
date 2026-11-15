@@ -71,14 +71,29 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
     # Evaluar si es bioma desértico hiperárido (Sahara, etc.)
     is_hyperarid = (annual_rain < 120.0) or ((15.0 <= lat_r <= 32.0 and -18.0 <= lon_r <= 55.0) and annual_rain < 200.0)
 
+    # Retención hídrica específica del suelo (ISRIC SoilGrids)
+    w_ret = soil_profile.get("water_retention", {})
+    top_wr = w_ret.get("topsoil_0_30cm", {})
+    sub_wr = w_ret.get("subsoil_30_60cm", {})
+
+    cc_top_vol = float(top_wr.get("field_capacity_pct", 28.0)) / 100.0
+    pmp_top_vol = float(top_wr.get("wilting_point_pct", 14.0)) / 100.0
+    cc_sub_vol = float(sub_wr.get("field_capacity_pct", 29.0)) / 100.0
+    pmp_sub_vol = float(sub_wr.get("wilting_point_pct", 14.5)) / 100.0
+
+    cc_prof_vol = (cc_top_vol + cc_sub_vol) / 2.0
+    pmp_prof_vol = (pmp_top_vol + pmp_sub_vol) / 2.0
+    awc_top_range = max(0.02, cc_top_vol - pmp_top_vol)
+    awc_prof_range = max(0.02, cc_prof_vol - pmp_prof_vol)
+
     if is_frozen:
-        surface_vol = 0.04
+        surface_vol = round(pmp_top_vol * 0.35, 3)
         surface_pct = 0.0
         surface_status = "suelo_congelado"
         t_label = f"{temp_c}°C" if temp_c is not None else "< 0°C"
         surface_desc = f"❄️ Suelo congelado / Permafrost (T: {t_label}); cama de siembra biológicamente inactiva."
         
-        rootzone_vol = 0.06
+        rootzone_vol = round(pmp_prof_vol * 0.40, 3)
         rootzone_pct = 0.0
         rootzone_status = "permafrost"
         rootzone_anomaly_z = -2.5
@@ -92,16 +107,16 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
         ndvi_est = 0.08
         esi_canopy = 0.10
     elif is_hyperarid:
-        surface_vol = 0.03
-        surface_pct = 5.0
+        surface_vol = round(pmp_top_vol * 0.45, 3)
+        surface_pct = 0.0
         surface_status = "deficit_extremo"
         surface_desc = "Capa superficial hiperárida desértica; humedad nula para implantación."
         
-        rootzone_vol = 0.05
-        rootzone_pct = 8.0
+        rootzone_vol = round(pmp_prof_vol * 0.55, 3)
+        rootzone_pct = 0.0
         rootzone_status = "agotado"
         rootzone_anomaly_z = -2.2
-        rootzone_desc = "Perfil arenoso desértico sin reserva hídrica."
+        rootzone_desc = "Perfil arenoso desértico sin reserva hídrica aprovechable (% AU: 0%)."
         
         rain_30d = round(max(0.0, 4.0 * rain_factor), 1)
         et_actual_30d = 110.0
@@ -111,47 +126,48 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
         ndvi_est = 0.04
         esi_canopy = 0.05
     else:
-        # 1. SMAP Humedad Superficial (0-5 cm, m3/m3 y %)
-        base_surf_vol = (0.24 * rain_factor * season_factor) + ((loc_seed % 7) - 3) * 0.012
-        surface_vol = max(0.08, min(0.48, round(base_surf_vol, 3)))
-        surface_pct = round(surface_vol * 100 / 0.45, 1)  # Normalizado sobre porosidad media 45%
+        # 1. SMAP Humedad Superficial (0-5 cm, m3/m3 y % AU)
+        # Modelada de acuerdo a los límites específicos de capacidad de campo y marchitez del suelo
+        surf_fraction = max(0.05, min(1.05, (0.60 * rain_factor * season_factor) + ((loc_seed % 7) - 3) * 0.03))
+        surface_vol = round(pmp_top_vol + (awc_top_range * surf_fraction), 3)
+        surface_pct = round(max(0.0, min(100.0, ((surface_vol - pmp_top_vol) / awc_top_range) * 100.0)), 1)
 
-        if surface_pct >= 85:
+        if surface_pct >= 90:
             surface_status = "exceso_hidrico"
-            surface_desc = "Saturación por exceso de precipitaciones recientes; riesgo de compactación."
-        elif surface_pct >= 55:
+            surface_desc = "Saturación hídrica en primeros 5 cm; riesgo de asfixia y compactación en siembra."
+        elif surface_pct >= 60:
             surface_status = "optimo_siembra"
-            surface_desc = "Cama de siembra con humedad ideal para germinación y emergencia uniforme."
+            surface_desc = "Cama de siembra con humedad óptima (% AU) para germinación y emergencia uniforme."
         elif surface_pct >= 35:
             surface_status = "adecuado"
-            surface_desc = "Humedad superficial moderada; viable para siembra inmediata."
-        elif surface_pct >= 20:
+            surface_desc = "Humedad superficial adecuada en cama de siembra; viable para implantación."
+        elif surface_pct >= 15:
             surface_status = "deficit_moderado"
-            surface_desc = "Capa superficial seca; esperar evento de lluvia o sembrar a mayor profundidad."
+            surface_desc = "Capa superficial seca; monitorear o sembrar a mayor profundidad buscando humedad."
         else:
             surface_status = "deficit_severo"
-            surface_desc = "Déficit severo en primeros 5 cm; no se recomienda siembra superficial."
+            surface_desc = "Déficit severo en primeros 5 cm (< 15% AU); no se recomienda siembra superficial."
 
-        # 2. SMAP Humedad en Zona Radicular (0-100 cm, m3/m3 y %)
-        base_root_vol = (0.28 * rain_factor) + ((loc_seed % 5) - 2) * 0.015
-        rootzone_vol = max(0.12, min(0.50, round(base_root_vol, 3)))
-        rootzone_pct = round(rootzone_vol * 100 / 0.48, 1)
+        # 2. SMAP Humedad en Zona Radicular (0-100 cm, m3/m3 y % AU)
+        root_fraction = max(0.10, min(1.02, (0.68 * rain_factor) + ((loc_seed % 5) - 2) * 0.035))
+        rootzone_vol = round(pmp_prof_vol + (awc_prof_range * root_fraction), 3)
+        rootzone_pct = round(max(0.0, min(100.0, ((rootzone_vol - pmp_prof_vol) / awc_prof_range) * 100.0)), 1)
 
-        # Anomalía respecto a la media histórica del mes (Z-score)
-        rootzone_anomaly_z = round(((rootzone_vol - (0.28 * rain_factor)) / 0.04), 2)
+        # Anomalía respecto al promedio histórico regional (Z-score)
+        rootzone_anomaly_z = round(((rootzone_vol - (pmp_prof_vol + awc_prof_range * 0.65)) / (awc_prof_range * 0.25)), 2)
 
-        if rootzone_pct >= 70:
+        if rootzone_pct >= 85:
             rootzone_status = "abundante"
-            rootzone_desc = "Excelente recarga en todo el perfil radicular; alta resiliencia estival."
-        elif rootzone_pct >= 45:
+            rootzone_desc = "Excelente recarga en todo el perfil radicular (% AU alto); máxima resiliencia estival."
+        elif rootzone_pct >= 50:
             rootzone_status = "favorable"
-            rootzone_desc = "Buena disponibilidad de agua útil en el primer metro de suelo."
+            rootzone_desc = "Buena disponibilidad de agua útil aprovechable en el primer metro de suelo."
         elif rootzone_pct >= 25:
             rootzone_status = "regular"
             rootzone_desc = "Reserva hídrica moderada; priorizar cultivos con raíces profundas y menor consumo."
         else:
             rootzone_status = "critico"
-            rootzone_desc = "Perfil hídrico agotado; alto riesgo de estrés hídrico para cultivos de alta demanda."
+            rootzone_desc = "Perfil hídrico agotado (< 25% AU); alto riesgo de estrés hídrico para cultivos de alta demanda."
 
         # 3. GPM IMERG & OpenET: Balance Hídrico reciente (últimos 30 días)
         rain_30d = round(max(5.0, 75.0 * rain_factor * season_factor + ((loc_seed % 19) - 9)), 1)
