@@ -24,11 +24,9 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """
-    Calcula y modela las lecturas satelitales en tiempo real según las fuentes oficiales de NASA y SoilGrids:
-    - NASA SMAP L3/L4: Humedad superficial (0-5 cm) y en zona radicular (0-100 cm).
-    - NASA GPM IMERG & OpenET: Balance hídrico reciente (P - ETa) y SPI-3.
-    - NASA HLS / MODIS / ECOSTRESS: NDVI y estrés evaporativo de canopia (ESI).
-    - SoilGrids (ISRIC): Textura USDA, retención hídrica AWC (0-30 y 30-60 cm), SOC y pH.
+    Genera indicadores SINTÉTICOS de demostración. Esta función no consulta SMAP,
+    GPM, OpenET, HLS ni ECOSTRESS. El perfil de suelo puede proceder de SoilGrids
+    o de su fallback, identificado mediante soil_profile.is_fallback.
     """
     lat_r, lon_r = round(lat, 2), round(lon, 2)
     soil_profile = query_soilgrids(lat_r, lon_r)
@@ -175,6 +173,8 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
     return {
         "spatial_cell": f"{lat_r}_{lon_r}",
         "timestamp_utc": today.isoformat(),
+        "data_quality": "simulated",
+        "data_notice": "Indicadores sintéticos de demostración; no son observaciones satelitales ni deben usarse como mediciones del lote.",
         "soil_profile": soil_profile,
         "smap_soil_moisture": {
             "surface_0_5cm": {
@@ -182,7 +182,7 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
                 "percentage": surface_pct,
                 "status": surface_status,
                 "description": surface_desc,
-                "sensor": "NASA SMAP L3 Enhanced (9km)",
+                "sensor": "Simulación local (no SMAP)",
             },
             "rootzone_0_100cm": {
                 "volumetric_m3_m3": rootzone_vol,
@@ -190,7 +190,7 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
                 "status": rootzone_status,
                 "anomaly_zscore": rootzone_anomaly_z,
                 "description": rootzone_desc,
-                "sensor": "NASA SMAP L4 Global (SPL4SMGP 9km)",
+                "sensor": "Simulación local (no SMAP)",
             },
         },
         "water_balance_gpm_openet": {
@@ -200,22 +200,21 @@ def calculate_satellite_metrics(lat: float, lon: float, climate_data: Optional[d
             "net_water_balance_mm": water_balance_30d,
             "spi_3_months": spi_3,
             "drought_risk": drought_risk,
-            "precipitation_source": "NASA GPM IMERG (Final Run)",
-            "et_source": "OpenET Ensemble (Landsat/Sentinel-2 30m)",
+            "precipitation_source": "Simulación local (no GPM IMERG)",
+            "et_source": "Simulación local (no OpenET)",
         },
         "vegetation_and_canopy": {
             "estimated_ndvi": ndvi_est,
             "canopy_stress_esi": esi_canopy,
-            "source": "NASA HLS & ECOSTRESS (30m / 70m)",
+            "source": "Simulación local (no HLS/ECOSTRESS)",
         },
     }
 
 
 def get_satellite_readings(lat: float, lon: float, climate_data: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """
-    Obtiene las lecturas satelitales consultando la caché local o generando
-    el cálculo normalizado según especificaciones NASA.
-    Garantiza que el perfil edafológico (SoilGrids) esté siempre sincronizado con los cálculos agronómicos.
+    Devuelve indicadores sintéticos cacheados y el perfil SoilGrids/fallback.
+    Los indicadores satelitales de este módulo NO son consultas a productos NASA.
     """
     lat_r, lon_r = round(lat, 2), round(lon, 2)
     cache_file = CACHE_DIR / f"satelite_{lat_r}_{lon_r}.json"
@@ -223,9 +222,13 @@ def get_satellite_readings(lat: float, lon: float, climate_data: Optional[dict[s
     readings = None
     if cache_file.exists():
         try:
-            readings = json.loads(cache_file.read_text(encoding="utf-8"))
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            cached_at = datetime.fromisoformat(cached.get("timestamp_utc", ""))
+            cache_age_s = (datetime.now(timezone.utc) - cached_at).total_seconds()
+            if 0 <= cache_age_s < 86400:
+                readings = cached
         except Exception as e:
-            logger.warning(f"Error al leer caché satelital {cache_file}: {e}")
+            logger.warning(f"Caché satelital inválida o antigua {cache_file}: {e}")
 
     if not readings:
         readings = calculate_satellite_metrics(lat_r, lon_r, climate_data)
