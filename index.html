@@ -1304,9 +1304,12 @@ footer {
   'use strict';
 
   // ──── Constants ────
-  const API = (window.location.protocol.startsWith('http') && window.location.origin)
-    ? window.location.origin
-    : 'http://localhost:8088';
+  const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  // Backend en producción en la nube (Render / Cloud Run) con SSL (HTTPS)
+  const PROD_API_URL = 'https://fieldshift-api.onrender.com';
+  const API = IS_LOCAL
+    ? 'http://localhost:8088'
+    : (window.location.origin.includes('onrender.com') ? window.location.origin : PROD_API_URL);
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const CROP_EMOJI = {
     maiz: '🌽', soja: '🫘', sorgo: '🌾', girasol: '🌻', trigo: '🌾',
