@@ -767,7 +767,7 @@ main {
 .bar-row .bar-icon { width: 20px; text-align: center; flex-shrink: 0; }
 
 .bar-row .bar-label {
-  width: 70px;
+  width: 82px;
   flex-shrink: 0;
   color: #777;
   font-weight: 500;
@@ -1616,6 +1616,7 @@ footer {
     // 2. Modelo agroclimático según bioma y hemisferio:
     const isArctic = Math.abs(lat) >= 55.0;
     const isSahara = (lat >= 15.0 && lat <= 32.0 && lon >= -18.0 && lon <= 55.0);
+    const isPatagonia = (lat <= -39.0 && lat >= -55.0 && lon <= -62.0 && lon >= -74.0);
     const isNorthern = lat >= 0;
 
     const newTempAvg = {};
@@ -1669,6 +1670,30 @@ footer {
           frost_days: 0.0, heat_days: h, heat_stress_days: h
         });
       }
+    } else if (isPatagonia) {
+      // Clima Frío y Semiárido de Estepa Patagónica Austral (Santa Cruz, Chubut, Río Negro)
+      // Calibrado con series climáticas oficiales NASA POWER (21 años):
+      // Primavera fría con heladas frecuentes (17.5 heladas en Octubre, Tmedia: 6.1°C) y ~195 mm anuales
+      const patagTemps = [13.5, 12.8, 9.5, 5.4, 1.7, -1.1, -1.6, 0.0, 2.8, 6.1, 9.4, 12.1];
+      const patagPrecip = [10.2, 15.4, 15.2, 18.9, 19.8, 27.1, 17.7, 18.0, 14.3, 11.1, 11.4, 15.9];
+      const patagFrost = [0.3, 0.7, 3.6, 13.0, 23.4, 27.3, 29.8, 29.4, 24.7, 17.5, 6.4, 1.6];
+      const patagHeat = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+      for (let m = 1; m <= 12; m++) {
+        const t = patagTemps[m - 1];
+        const p = patagPrecip[m - 1];
+        const f = patagFrost[m - 1];
+        const h = patagHeat[m - 1];
+        newTempAvg[m] = t;
+        newPrecipMm[m] = p;
+        newFrostByMonth[m] = f;
+        newHeatByMonth[m] = h;
+        monthlyNormals.push({
+          month: m, month_name: monthNames[m - 1],
+          temp_mean: t, temperature: t, precipitation: p, rainfall: p,
+          frost_days: f, heat_days: h, heat_stress_days: h
+        });
+      }
     } else {
       // Gradiente agroclimático templado / de referencia
       const refLat = base.location.latitude;
@@ -1687,9 +1712,10 @@ footer {
         newTempAvg[m] = adjT;
         newPrecipMm[m] = adjP;
 
-        const isWinter = (m >= 5 && m <= 9);
-        let frostBase = Math.max(0, (-lat - 26) * 0.3);
-        const adjFrost = isWinter ? Math.round(frostBase * (m === 7 ? 2.5 : 1.2) * 10) / 10 : 0.0;
+        // Régimen estacional de heladas: en el hemisferio sur frío (lat < -35°), la temporada de heladas abarca otoño, invierno y primavera
+        const isFrostSeason = (m >= 4 && m <= 10) || (lat < -37.0 && (m === 11 || m === 3));
+        let frostBase = Math.max(0, (-lat - 26) * 0.4);
+        const adjFrost = isFrostSeason ? Math.round(frostBase * ([6, 7, 8].includes(m) ? 2.5 : (m === 5 || m === 9 ? 1.6 : 0.9)) * 10) / 10 : 0.0;
         newFrostByMonth[m] = adjFrost;
 
         const isSummer = (m <= 3 || m >= 10);
@@ -1909,13 +1935,80 @@ footer {
       }
     }
 
-    const waterRationale = `Suelo ${usdaText} (AWC: ${awcTotalMm} mm en 0-60cm): reserva útil en perfil ${soilWaterReserveMm} mm (SMAP ${rootPct}%).`;
+    const waterRationale = `Suelo ${usdaText} (AWC: ${awcTotalMm} mm en 0-60cm): reserva útil en perfil ${soilWaterReserveMm} mm (SMAP ${rootPct}% AU).`;
+
+    // Humedad superficial (cama de siembra 0-5 cm)
+    let surfPct = 50.0;
+    if (sat && sat.smap_soil_moisture && sat.smap_soil_moisture.surface_0_5cm) {
+      surfPct = Number(sat.smap_soil_moisture.surface_0_5cm.percentage ?? 50.0);
+    }
+    let seedbedMod = 0.0, seedbedRationale = null;
+    if (surfPct < 18.0) {
+      seedbedMod = -4.0;
+      seedbedRationale = `⚠️ Cama de siembra seca (${surfPct}% AU en 0-5cm): riesgo en emergencia; sembrar profundo o esperar recarga (-4.0).`;
+    } else if (surfPct >= 90.0) {
+      seedbedMod = -3.0;
+      seedbedRationale = `⚠️ Cama de siembra saturada (${surfPct}% AU en 0-5cm): riesgo de anegamiento y asfixia de semilla (-3.0).`;
+    } else if (surfPct >= 55.0) {
+      seedbedRationale = `✓ Cama de siembra óptima (${surfPct}% AU en 0-5cm): excelente humedad para germinación uniforme.`;
+    }
+
+    // Textura y drenaje (Arena vs Arcilla)
+    let sandPct = 38.0, clayPct = 22.0;
+    if (soil && soil.texture && typeof soil.texture === 'object') {
+      sandPct = Number(soil.texture.sand_pct ?? 38.0);
+      clayPct = Number(soil.texture.clay_pct ?? 22.0);
+    }
+    let texMod = 0.0, texRationale = null;
+    const waterCons = (crop.water_consumption || 'Medio').toLowerCase();
+    if (sandPct >= 65.0) {
+      if (key === 'mani') {
+        texMod = 4.0;
+        texRationale = `✓ Textura arenosa (${sandPct}% arena): ideal para penetración de clavos y arrancado en maní (+4.0).`;
+      } else if (waterCons === 'alto' || waterCons === 'muy alto') {
+        texMod = -3.5;
+        texRationale = `⚠️ Textura arenosa (${sandPct}% arena): drenaje excesivo; mayor vulnerabilidad a sequías cortas (-3.5).`;
+      }
+    } else if (clayPct >= 40.0) {
+      if (key === 'mani' || key === 'papa') {
+        texMod = -4.0;
+        texRationale = `⚠️ Textura arcillosa (${clayPct}% arcilla): suelo pesado que dificulta desarrollo de tubérculos/vainas (-4.0).`;
+      }
+    }
+
+    // Balance hídrico antecedente de 30 días (SPI-3)
+    let spi3 = 0.0;
+    if (sat && sat.water_balance_gpm_openet) {
+      spi3 = Number(sat.water_balance_gpm_openet.spi_3_months ?? 0.0);
+    }
+    let spiMod = 0.0, spiRationale = null;
+    if (spi3 <= -1.2) {
+      if (waterCons === 'alto' || waterCons === 'muy alto') {
+        spiMod = -4.0;
+        spiRationale = `⚠️ Sequía antecedente (SPI-3: ${spi3}): déficit acumulado; cultivo de alta demanda condicionado (-4.0).`;
+      } else {
+        spiMod = -1.5;
+        spiRationale = `⚠️ Déficit hídrico antecedente (SPI-3: ${spi3}): reserva del perfil condicionada.`;
+      }
+    } else if (spi3 >= 1.0) {
+      spiRationale = `✓ Balance hídrico favorable (SPI-3: ${spi3}): perfil hídrico antecedente con buena recarga.`;
+    }
+
+    const extraNotes = [waterRationale, seedbedRationale, texRationale, spiRationale, socRationale, phRationale].filter(Boolean);
 
     // 5. Evaluación de Umbrales Críticos / Ley del Mínimo de Liebig
     const plantTemp = monthlyTemp[plantingMonth] ?? monthlyTemp[String(plantingMonth)] ?? 20;
     const frostTol = crop.frost_tolerance || 'media';
     const isFrozenSoil = (plantTemp < 0.0) || usdaText.toLowerCase().includes('permafrost');
-    const isLethalClimate = (tFit <= 0.0) || (fPen >= 85.0 && (frostTol === 'nula' || frostTol === 'baja'));
+
+    const plantMonthFrost = frostByMonth[plantingMonth] ?? frostByMonth[String(plantingMonth)] ?? 0;
+    const optMinTemp = (crop.optimal_temp_range_C && crop.optimal_temp_range_C[0]) || 15;
+
+    // Criterio letal: heladas en mes de siembra o ciclo con baja tolerancia, o temperatura por debajo de la base fisiológica
+    const isLethalFrost = (frostTol === 'nula' && (plantMonthFrost >= 2.5 || fPen >= 65.0)) ||
+                          (frostTol === 'baja' && (plantMonthFrost >= 5.0 || fPen >= 80.0));
+    const isLethalTemp = (tFit <= 0.0) || (plantTemp < 10.0 && (optMinTemp >= 20.0 || frostTol === 'nula'));
+    const isLethalClimate = isLethalFrost || isLethalTemp;
 
     let finalScore = 0.0;
     let baseClimate = 0.0;
@@ -1928,20 +2021,22 @@ footer {
       baseClimate = 0.0;
       effSowingFactor = 0.0;
       soilModifier = 0.0;
-      const fatalMsg = isFrozenSoil
-        ? `❄️ Inviable por Suelo Congelado / Criosfera (T mes ${plantingMonth}: ${plantTemp}°C). Germinación e implantación biológicamente imposibles (Ley del Mínimo de Liebig).`
-        : `❄️ Inviable por Régimen Térmico Letal (Aptitud térmica: 0% / Heladas: ${Math.round(fPen)}%). Cultivo biológicamente inviable en esta latitud y mes (Ley de Liebig).`;
-      soilRationale = [fatalMsg, waterRationale];
-      if (socRationale) soilRationale.push(socRationale);
-      if (phRationale) soilRationale.push(phRationale);
+      let fatalMsg = '';
+      if (isFrozenSoil) {
+        fatalMsg = `❄️ Inviable por Suelo Congelado / Criosfera (T mes ${plantingMonth}: ${plantTemp}°C). Germinación e implantación biológicamente imposibles (Ley del Mínimo de Liebig).`;
+      } else if (isLethalFrost) {
+        fatalMsg = `❄️ Inviable por Riesgo Crítico de Heladas (${plantMonthFrost} días/mes en siembra / Penalización: ${Math.round(fPen)}%). Daño por congelamiento letal para plántulas (Ley de Liebig).`;
+      } else {
+        fatalMsg = `❄️ Inviable por Régimen Térmico Letal (T mes ${plantingMonth}: ${plantTemp}°C / Aptitud térmica: ${Math.round(tFit)}%). Temperatura inferior a la base fisiológica del cultivo (Ley de Liebig).`;
+      }
+      soilRationale = [fatalMsg, ...extraNotes];
     } else {
-      soilRationale = [waterRationale];
-      if (socRationale) soilRationale.push(socRationale);
-      if (phRationale) soilRationale.push(phRationale);
+      soilRationale = extraNotes;
 
       const thermalGate = Math.pow(tFit / 100, 0.6);
       baseClimate = (0.30 * tFit + 0.30 * pFit + 0.15 * fSafe + 0.10 * hSafe + 0.15 * rSafe) * thermalGate;
-      soilModifier = Math.round((socMod + phMod) * sowingFactor * 10) / 10;
+      const totalSoilMod = socMod + phMod + seedbedMod + texMod + spiMod;
+      soilModifier = Math.round(totalSoilMod * sowingFactor * 10) / 10;
       finalScore = Math.max(0, Math.min(100, (baseClimate * sowingFactor) + soilModifier));
     }
 
@@ -2253,6 +2348,34 @@ footer {
       cc030 = 22.0; pmp030 = 9.5; cc3060 = 23.5; pmp3060 = 10.5;
       socVal = 11.0; phVal = 7.4; drainage = 'Rápido';
     }
+    // 5. Región Cuyo / Monte Árido y Precordillera (Mendoza, San Juan, San Luis precordillerano)
+    else if (latR <= -29.0 && latR >= -37.0 && lonR <= -66.0 && lonR >= -71.5) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Aridisol Cuyano - Precordillera';
+      usdaClass = 'Franco arenoso'; sandPct = 66.0; siltPct = 23.0; clayPct = 11.0;
+      cc030 = 17.0; pmp030 = 9.0; cc3060 = 16.0; pmp3060 = 8.5; // awc = 8.0% + 7.5% = 46.5 mm
+      socVal = 6.5; phVal = 7.9; drainage = 'Rápido a moderado (permeable)';
+    }
+    // 6. Región NOA Árido / Valles Calchaquíes y Puna Andina
+    else if (latR <= -22.0 && latR >= -29.0 && lonR <= -65.0 && lonR >= -70.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Aridisol / Entisol Andino de Altura';
+      usdaClass = 'Arenoso'; sandPct = 72.0; siltPct = 18.0; clayPct = 10.0;
+      cc030 = 14.5; pmp030 = 7.5; cc3060 = 14.0; pmp3060 = 7.5; // awc = 7.0% + 6.5% = 40.5 mm
+      socVal = 5.0; phVal = 8.1; drainage = 'Rápido a excesivo';
+    }
+    // 7. Chaco Seco / Semiárido (Santiago del Estero, Chaco occidental, Formosa)
+    else if (latR <= -23.0 && latR >= -29.0 && lonR <= -59.0 && lonR >= -65.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Mollisol / Alfisol del Chaco Semiárido';
+      usdaClass = 'Franco'; sandPct = 48.0; siltPct = 34.0; clayPct = 18.0;
+      cc030 = 26.0; pmp030 = 12.5; cc3060 = 27.0; pmp3060 = 13.5; // awc = 13.5% + 13.5% = 81.0 mm
+      socVal = 13.0; phVal = 7.0; drainage = 'Moderado a bueno';
+    }
+    // 8. Estepa Patagónica y Meseta Austral (-55 <= lat <= -38 y -74 <= lon <= -62)
+    else if (latR <= -38.0 && latR >= -55.0 && lonR <= -62.0 && lonR >= -74.0) {
+      soilSrc = 'ISRIC SoilGrids / Bioma Aridisol de Estepa Patagónica';
+      usdaClass = 'Franco arenoso'; sandPct = 68.0; siltPct = 21.0; clayPct = 11.0;
+      cc030 = 16.0; pmp030 = 8.5; cc3060 = 15.0; pmp3060 = 8.0; // awc = 7.5% + 7.0% = 43.5 mm
+      socVal = 7.5; phVal = 7.2; drainage = 'Rápido a excesivo (suelo esquelético permeable)';
+    }
 
     const awc030Pct = Math.round((cc030 - pmp030) * 10) / 10;
     const awc3060Pct = Math.round((cc3060 - pmp3060) * 10) / 10;
@@ -2264,6 +2387,7 @@ footer {
 
     const soil = {
       source: soilSrc,
+      is_fallback: true,
       coordinates: { latitude: latR, longitude: lonR },
       texture: {
         usda_class: usdaClass,
@@ -2333,20 +2457,27 @@ footer {
     }
     const isHyperarid = (annualRain < 120) || ((latR >= 15 && latR <= 32 && lonR >= -18 && lonR <= 55) && annualRain < 200);
 
+    const ccTopVol = cc030 / 100.0;
+    const pmpTopVol = pmp030 / 100.0;
+    const ccProfVol = (cc030 + cc3060) / 200.0;
+    const pmpProfVol = (pmp030 + pmp3060) / 200.0;
+    const awcTopRange = Math.max(0.02, ccTopVol - pmpTopVol);
+    const awcProfRange = Math.max(0.02, ccProfVol - pmpProfVol);
+
     let surfaceVol, surfacePct, surfStatus, surfClass, surfDesc;
     let rootVol, rootPct, rootZ, rootStatus, rootClass, rootDesc;
     let rain30, et30, netBal, spi3, drought, spiClass;
     let ndvi, esi;
 
     if (isFrozen) {
-      surfaceVol = 0.04;
+      surfaceVol = Math.round(pmpTopVol * 0.35 * 1000) / 1000;
       surfacePct = 0.0;
       surfStatus = 'Suelo congelado';
       surfClass = 'alert';
       const tLabel = tempC !== null ? `${tempC}°C` : '< 0°C';
       surfDesc = `❄️ Suelo congelado / Permafrost (T: ${tLabel}); cama de siembra biológicamente inactiva.`;
 
-      rootVol = 0.06;
+      rootVol = Math.round(pmpProfVol * 0.40 * 1000) / 1000;
       rootPct = 0.0;
       rootZ = -2.5;
       rootStatus = 'Permafrost';
@@ -2362,18 +2493,18 @@ footer {
       ndvi = 0.08;
       esi = 0.10;
     } else if (isHyperarid) {
-      surfaceVol = 0.03;
-      surfacePct = 5.0;
+      surfaceVol = Math.round(pmpTopVol * 0.45 * 1000) / 1000;
+      surfacePct = 0.0;
       surfStatus = 'Déficit extremo';
       surfClass = 'alert';
-      surfDesc = 'Capa superficial hiperárida desértica; humedad nula para implantación.';
+      surfDesc = 'Capa superficial hiperárida desértica; humedad nula para implantación (% AU: 0%).';
 
-      rootVol = 0.05;
-      rootPct = 8.0;
+      rootVol = Math.round(pmpProfVol * 0.55 * 1000) / 1000;
+      rootPct = 0.0;
       rootZ = -2.2;
       rootStatus = 'Agotado';
       rootClass = 'alert';
-      rootDesc = 'Perfil arenoso desértico sin reserva hídrica.';
+      rootDesc = 'Perfil arenoso desértico sin reserva hídrica aprovechable (% AU: 0%).';
 
       rain30 = Math.round(Math.max(0, 4 * rainFactor) * 10) / 10;
       et30 = 110.0;
@@ -2384,34 +2515,37 @@ footer {
       ndvi = 0.04;
       esi = 0.05;
     } else {
-      const baseSurf = (0.24 * rainFactor * seasonFactor) + ((locSeed % 7) - 3) * 0.012;
-      surfaceVol = Math.round(Math.max(0.08, Math.min(0.48, baseSurf)) * 1000) / 1000;
-      surfacePct = Math.round((surfaceVol * 100 / 0.45) * 10) / 10;
+      // Cálculo físico de humedad (% AU) vinculado a los límites específicos de SoilGrids
+      const surfFraction = Math.max(0.05, Math.min(1.05, (0.60 * rainFactor * seasonFactor) + ((locSeed % 7) - 3) * 0.03));
+      surfaceVol = Math.round((pmpTopVol + (awcTopRange * surfFraction)) * 1000) / 1000;
+      surfacePct = Math.round(Math.max(0.0, Math.min(100.0, ((surfaceVol - pmpTopVol) / awcTopRange) * 100.0)) * 10) / 10;
 
-      surfStatus = 'Adecuado'; surfClass = 'optimal'; surfDesc = 'Humedad superficial viable para siembra.';
-      if (surfacePct >= 80) { surfStatus = 'Exceso hídrico'; surfClass = 'alert'; surfDesc = 'Saturación en primeros 5 cm; riesgo de anegamiento.'; }
-      else if (surfacePct >= 50) { surfStatus = 'Óptimo siembra'; surfClass = 'optimal'; surfDesc = 'Cama de siembra con humedad ideal para germinación.'; }
-      else if (surfacePct < 30) { surfStatus = 'Déficit hídrico'; surfClass = 'warning'; surfDesc = 'Capa superficial seca; monitorear o sembrar profundo.'; }
+      surfStatus = 'Adecuado'; surfClass = 'optimal'; surfDesc = 'Humedad superficial adecuada en cama de siembra; viable para siembra.';
+      if (surfacePct >= 90) { surfStatus = 'Exceso hídrico'; surfClass = 'alert'; surfDesc = 'Saturación en primeros 5 cm; riesgo de asfixia y compactación.'; }
+      else if (surfacePct >= 60) { surfStatus = 'Óptimo siembra'; surfClass = 'optimal'; surfDesc = 'Cama de siembra con humedad ideal (% AU) para germinación uniforme.'; }
+      else if (surfacePct < 15) { surfStatus = 'Déficit severo'; surfClass = 'alert'; surfDesc = 'Capa superficial muy seca (< 15% AU); no sembrar en superficie.'; }
+      else if (surfacePct < 35) { surfStatus = 'Déficit moderado'; surfClass = 'warning'; surfDesc = 'Capa superficial seca; sembrar profundo o esperar lluvia.'; }
 
-    const baseRoot = (0.28 * rainFactor) + ((locSeed % 5) - 2) * 0.015;
-    const rootVol = Math.round(Math.max(0.12, Math.min(0.50, baseRoot)) * 1000) / 1000;
-    const rootPct = Math.round((rootVol * 100 / 0.48) * 10) / 10;
-    const rootZ = Math.round(((rootVol - 0.28 * rainFactor) / 0.04) * 100) / 100;
-    let rootStatus = 'Favorable', rootClass = 'optimal', rootDesc = 'Buena disponibilidad de agua útil en el primer metro.';
-    if (rootPct >= 70) { rootStatus = 'Abundante'; rootClass = 'optimal'; rootDesc = 'Excelente recarga del perfil radicular; alta resiliencia.'; }
-    else if (rootPct < 40) { rootStatus = 'Regular'; rootClass = 'warning'; rootDesc = 'Reserva hídrica moderada; preferir cultivos con menor demanda.'; }
-    else if (rootPct < 25) { rootStatus = 'Crítico'; rootClass = 'alert'; rootDesc = 'Perfil agotado; alto riesgo de estrés hídrico.'; }
+      const rootFraction = Math.max(0.10, Math.min(1.02, (0.68 * rainFactor) + ((locSeed % 5) - 2) * 0.035));
+      rootVol = Math.round((pmpProfVol + (awcProfRange * rootFraction)) * 1000) / 1000;
+      rootPct = Math.round(Math.max(0.0, Math.min(100.0, ((rootVol - pmpProfVol) / awcProfRange) * 100.0)) * 10) / 10;
+      rootZ = Math.round(((rootVol - (pmpProfVol + awcProfRange * 0.65)) / (awcProfRange * 0.25)) * 100) / 100;
 
-    const rain30 = Math.round((Math.max(5, 75 * rainFactor * seasonFactor + ((locSeed % 19) - 9))) * 10) / 10;
-    const et30 = Math.round((Math.max(20, 85 * seasonFactor + ((locSeed % 11) - 5))) * 10) / 10;
-    const netBal = Math.round((rain30 - et30) * 10) / 10;
-    const spi3 = Math.round(Math.tanh(netBal / 50) * 1.5 * 100) / 100;
-    let drought = 'Bajo (Normal)', spiClass = 'optimal';
-    if (spi3 < -1.0) { drought = 'Moderado a Alto'; spiClass = 'warning'; }
-    else if (spi3 >= 0.8) { drought = 'Sin riesgo (Húmedo)'; spiClass = 'optimal'; }
+      rootStatus = 'Favorable'; rootClass = 'optimal'; rootDesc = 'Buena disponibilidad de agua útil aprovechable en el perfil exploratorio.';
+      if (rootPct >= 85) { rootStatus = 'Abundante'; rootClass = 'optimal'; rootDesc = 'Perfil hídrico colmado a capacidad de campo (% AU alto); máxima reserva estival.'; }
+      else if (rootPct < 25) { rootStatus = 'Crítico'; rootClass = 'alert'; rootDesc = 'Perfil agotado (< 25% AU); severo riesgo de estrés hídrico.'; }
+      else if (rootPct < 50) { rootStatus = 'Regular'; rootClass = 'warning'; rootDesc = 'Reserva hídrica moderada; preferir cultivos rústicos o menor densidad.'; }
 
-    const ndvi = Math.round(Math.max(0.2, Math.min(0.85, 0.45 * rainFactor * seasonFactor + ((locSeed % 13) - 6) * 0.02)) * 100) / 100;
-    const esi = Math.round(Math.max(0.1, Math.min(1.0, 0.70 + (netBal / 200))) * 100) / 100;
+      rain30 = Math.round((Math.max(5, 75 * rainFactor * seasonFactor + ((locSeed % 19) - 9))) * 10) / 10;
+      et30 = Math.round((Math.max(20, 85 * seasonFactor + ((locSeed % 11) - 5))) * 10) / 10;
+      netBal = Math.round((rain30 - et30) * 10) / 10;
+      spi3 = Math.round(Math.tanh(netBal / 50) * 1.5 * 100) / 100;
+      drought = 'Bajo (Normal)'; spiClass = 'optimal';
+      if (spi3 < -1.0) { drought = 'Moderado a Alto'; spiClass = 'warning'; }
+      else if (spi3 >= 0.8) { drought = 'Sin riesgo (Húmedo)'; spiClass = 'optimal'; }
+
+      ndvi = Math.round(Math.max(0.2, Math.min(0.85, 0.45 * rainFactor * seasonFactor + ((locSeed % 13) - 6) * 0.02)) * 100) / 100;
+      esi = Math.round(Math.max(0.1, Math.min(1.0, 0.70 + (netBal / 200))) * 100) / 100;
     }
 
     return {
@@ -2481,10 +2615,22 @@ footer {
     const phClass = acid.ph_class || acid.ph_classification || (phVal < 6.0 ? 'Ácido' : (phVal > 7.3 ? 'Alcalino' : 'Neutro'));
 
     const soilSrc = soil.source || 'ISRIC SoilGrids v2.0 (250m)';
+    const isSoilFallback = Boolean(soil.is_fallback);
 
     if ($satCellCoord) {
-      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})`;
+      const fallbackBadge = isSoilFallback ? ' <span style="font-size:0.72rem;background:#fff3cd;color:#856404;border:1px solid #ffeeba;padding:1px 5px;border-radius:4px;margin-left:4px">⚠️ Estimado regional</span>' : '';
+      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})${fallbackBadge}`;
     }
+
+    const rootPctVal = root.percentage != null ? Number(root.percentage) : 0;
+    let rootLabel = root.status;
+    if (!rootLabel) {
+      if (rootPctVal <= 5) rootLabel = 'Agotado';
+      else if (rootPctVal < 25) rootLabel = 'Déficit severo';
+      else if (rootPctVal < 50) rootLabel = 'Regular';
+      else rootLabel = 'Favorable';
+    }
+    const rootDescription = root.description || (rootPctVal < 25 ? 'Perfil radicular agotado; alto riesgo de déficit hídrico.' : 'Agua útil almacenada en perfil exploratorio.');
 
     $satGrid.innerHTML = `
       <div class="sat-card">
@@ -2493,7 +2639,7 @@ footer {
           <span class="sat-pill ${surfCls}">${isSurfFrozen ? '❄️ ' : ''}${surf.status || 'Adecuado'}</span>
         </div>
         <div class="sat-card-val">
-          ${surf.percentage || 0}% <small>(${surf.volumetric_m3_m3 || 0} m³/m³)</small>
+          ${surf.percentage || 0}% <small>AU (${surf.volumetric_m3_m3 || 0} m³/m³)</small>
         </div>
         <div class="sat-card-sub">${surf.description || 'Cama de siembra evaluada.'}</div>
         <div class="sat-source">🛰️ NASA SMAP L3 Enhanced (9 km)</div>
@@ -2502,12 +2648,12 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🌱 Humedad Radicular (0-100 cm)</span>
-          <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${root.status || 'Favorable'}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
+          <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${rootLabel}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
         </div>
         <div class="sat-card-val">
-          ${root.percentage || 0}% <small>(${root.volumetric_m3_m3 || 0} m³/m³)</small>
+          ${rootPctVal}% <small>AU (${root.volumetric_m3_m3 ?? 0} m³/m³)</small>
         </div>
-        <div class="sat-card-sub">${root.description || 'Agua útil almacenada en perfil exploratorio.'}</div>
+        <div class="sat-card-sub">${rootDescription}</div>
         <div class="sat-source">🛰️ NASA SMAP L4 Global (9 km)</div>
       </div>
 
@@ -2527,7 +2673,7 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🏔️ Suelo & Edafología ISRIC</span>
-          <span class="sat-pill optimal">${usdaClass}</span>
+          <span class="sat-pill ${isSoilFallback ? 'warning' : 'optimal'}">${isSoilFallback ? '⚠️ Estimado' : usdaClass}</span>
         </div>
         <div class="sat-card-val">
           AWC ${awcTotal} mm <small>(0-60 cm)</small>
@@ -2537,7 +2683,7 @@ footer {
           Retención: 0-30cm: <strong>${awc030} mm</strong> | 30-60cm: <strong>${awc3060} mm</strong><br>
           Fertilidad: SOC <strong>${socVal} g/kg</strong> (%MO: <strong>${omVal}%</strong> · ${fertLevel}) · pH: <strong>${phVal}</strong> (${phClass})
         </div>
-        <div class="sat-source">🌍 ${soilSrc}</div>
+        <div class="sat-source">${isSoilFallback ? '⚠️ Contingencia regional (ISRIC no disponible)' : `🌍 ${soilSrc}`}</div>
       </div>
 
       <div class="sat-card">
@@ -2772,9 +2918,9 @@ footer {
         <div class="breakdown">
           ${barRow('🌡️', 'Temp', tempFit)}
           ${barRow('🌧️', 'Precip', precipFit)}
-          ${barRow('❄️', 'Helada', 100 - frostRisk)}
-          ${barRow('🔥', 'Calor', 100 - heatRisk)}
-          ${barRow('📊', 'Variab.', 100 - rainVar)}
+          ${barRow('❄️', 'R. Helada', frostRisk, true)}
+          ${barRow('🔥', 'Estrés Calor', heatRisk, true)}
+          ${barRow('📊', 'Variab.', rainVar, true)}
         </div>
 
         <button type="button" class="btn-select-crop" data-crop="${crop.crop_key || crop.crop || name}">
@@ -2816,13 +2962,23 @@ footer {
     });
   }
 
-  function barRow(icon, label, value) {
-    const v = Math.max(0, Math.min(100, value));
+  function barRow(icon, label, value, isRisk = false) {
+    const v = Math.max(0, Math.min(100, Math.round(value)));
+    // Indicadores positivos (aptitud): 100 es óptimo (verde), 0 es pésimo (rojo)
+    // Indicadores de riesgo/estrés: 0 es óptimo (verde), 100 es crítico (rojo)
+    let cls;
+    if (isRisk) {
+      if (v <= 25) cls = 'high'; // Riesgo bajo = Verde
+      else if (v <= 55) cls = 'mid'; // Riesgo moderado = Amarillo
+      else cls = 'low'; // Riesgo severo = Rojo
+    } else {
+      cls = scoreClass(v);
+    }
     return `
       <div class="bar-row">
         <span class="bar-icon">${icon}</span>
         <span class="bar-label">${label}</span>
-        <span class="bar-track"><span class="bar-fill ${scoreClass(v)}" data-target="${v}"></span></span>
+        <span class="bar-track"><span class="bar-fill ${cls}" data-target="${v}"></span></span>
         <span class="bar-val">${v}</span>
       </div>`;
   }
