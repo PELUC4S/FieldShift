@@ -621,7 +621,102 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.25rem;
+}
+
+/* ──── Ranking Pagination / Carousel ──── */
+.ranking-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem;
+  margin: 1.25rem 0 2.5rem 0;
+  flex-wrap: wrap;
+}
+
+.btn-page {
+  background: var(--white);
+  border: 1px solid #cbd5e1;
+  color: var(--dark-navy);
+  padding: .5rem 1.15rem;
+  border-radius: 999px;
+  font-size: .84rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all var(--transition);
+}
+
+.btn-page:hover:not(:disabled) {
+  background: var(--dark-navy);
+  color: var(--white);
+  border-color: var(--dark-navy);
+  transform: translateY(-1px);
+}
+
+.btn-page:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.page-indicators {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.page-pill {
+  min-width: 2.2rem;
+  height: 2.2rem;
+  padding: 0 .55rem;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: var(--white);
+  color: #475569;
+  font-size: .84rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.page-pill:hover:not(.active) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: var(--dark-navy);
+}
+
+.page-pill.active {
+  background: var(--mid-green);
+  color: var(--white);
+  border-color: var(--mid-green);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(46, 125, 50, 0.28);
+}
+
+.page-status-text {
+  font-size: .82rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-left: .4rem;
+}
+
+@media (max-width: 600px) {
+  .ranking-pagination {
+    gap: .5rem;
+  }
+  .page-status-text {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+    margin-top: .25rem;
+  }
 }
 
 .crop-card {
@@ -1300,6 +1395,12 @@ footer {
     <div class="hidden" id="rankingSection">
       <div class="section-heading">🏆 Ranking de Cultivos</div>
       <div class="ranking-grid" id="rankingGrid"></div>
+      <div class="ranking-pagination hidden" id="rankingPagination">
+        <button type="button" class="btn-page" id="btnRankPrev" title="Página anterior">❮ Anterior</button>
+        <div class="page-indicators" id="rankPageIndicators"></div>
+        <button type="button" class="btn-page" id="btnRankNext" title="Página siguiente">Siguiente ❯</button>
+        <span class="page-status-text" id="rankPageStatus"></span>
+      </div>
     </div>
 
     <!-- Rotation results -->
@@ -1350,6 +1451,16 @@ footer {
   const $loading        = document.getElementById('loadingSkeleton');
   const $rankSection    = document.getElementById('rankingSection');
   const $rankGrid       = document.getElementById('rankingGrid');
+  const $rankPagination = document.getElementById('rankingPagination');
+  const $btnRankPrev    = document.getElementById('btnRankPrev');
+  const $btnRankNext    = document.getElementById('btnRankNext');
+  const $rankPageIndicators = document.getElementById('rankPageIndicators');
+  const $rankPageStatus = document.getElementById('rankPageStatus');
+
+  const RANK_PAGE_SIZE = 6;
+  let currentRankCrops = [];
+  let currentRankPage = 1;
+
   const $rotSection     = document.getElementById('rotationSection');
   const $timeline       = document.getElementById('timeline');
   const $rotSummary     = document.getElementById('rotationSummary');
@@ -1367,6 +1478,25 @@ footer {
   $cycles.addEventListener('input', () => $cyclesVal.textContent = $cycles.value);
   $cycles.addEventListener('change', () => analyze());
   $month.addEventListener('change', () => analyze());
+
+  // ──── Ranking pagination buttons ────
+  if ($btnRankPrev) {
+    $btnRankPrev.addEventListener('click', () => {
+      if (currentRankPage > 1) {
+        renderRankPage(currentRankPage - 1);
+        $rankSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+  if ($btnRankNext) {
+    $btnRankNext.addEventListener('click', () => {
+      const totalPages = Math.ceil(currentRankCrops.length / RANK_PAGE_SIZE) || 1;
+      if (currentRankPage < totalPages) {
+        renderRankPage(currentRankPage + 1);
+        $rankSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
 
   // ──── Previous crops change listeners ────
   [$prevCrop1, $prevCrop2, $prevCrop3].forEach(el => {
@@ -2997,11 +3127,27 @@ footer {
   // ──── Render Ranking ────
   function renderRanking(data) {
     // data can be an array or { crops: [...] } or { ranking: [...] }
-    let crops = Array.isArray(data) ? data : (data.crops || data.ranking || data.results || []);
-    crops.sort((a, b) => (b.score || b.probability_score || 0) - (a.score || a.probability_score || 0));
+    currentRankCrops = Array.isArray(data) ? data : (data.crops || data.ranking || data.results || []);
+    currentRankCrops.sort((a, b) => (b.score || b.probability_score || 0) - (a.score || a.probability_score || 0));
+
+    const rHeading = $rankSection.querySelector('.section-heading');
+    if (rHeading) rHeading.innerHTML = `🏆 Ranking de Cultivos <span style="font-size:.82rem;font-weight:500;color:#555;margin-left:.4rem">(📍 Lat: ${parseFloat($lat.value).toFixed(2)}, Lon: ${parseFloat($lon.value).toFixed(2)})</span>`;
+    $rankSection.classList.remove('hidden');
+
+    renderRankPage(1);
+  }
+
+  function renderRankPage(page) {
+    currentRankPage = page;
+    const totalItems = currentRankCrops.length;
+    const totalPages = Math.ceil(totalItems / RANK_PAGE_SIZE) || 1;
+    const startIdx = (page - 1) * RANK_PAGE_SIZE;
+    const endIdx = Math.min(startIdx + RANK_PAGE_SIZE, totalItems);
+    const pageCrops = currentRankCrops.slice(startIdx, endIdx);
 
     $rankGrid.innerHTML = '';
-    crops.forEach((crop, i) => {
+    pageCrops.forEach((crop, localIdx) => {
+      const globalIdx = startIdx + localIdx;
       const score = Math.round(crop.score ?? crop.probability_score ?? 0);
       const name = crop.crop || crop.name || crop.crop_name || 'Cultivo';
       const type = crop.type || crop.crop_type || '';
@@ -3021,13 +3167,13 @@ footer {
 
       const card = document.createElement('div');
       card.className = `crop-card score-${cls}`;
-      card.style.animationDelay = `${i * 0.08}s`;
+      card.style.animationDelay = `${localIdx * 0.06}s`;
 
       card.innerHTML = `
         <div class="card-header">
           <div class="card-crop-name">
             <span class="emoji">${getEmoji(name)}</span>
-            <span class="name">${formatCropName(name)}</span>
+            <span class="name">#${globalIdx + 1} ${formatCropName(name)}</span>
           </div>
           <div class="circle-score">
             <svg viewBox="0 0 56 56">
@@ -3075,23 +3221,50 @@ footer {
       $rankGrid.appendChild(card);
     });
 
-    const rHeading = $rankSection.querySelector('.section-heading');
-    if (rHeading) rHeading.innerHTML = `🏆 Ranking de Cultivos <span style="font-size:.82rem;font-weight:500;color:#555;margin-left:.4rem">(📍 Lat: ${parseFloat($lat.value).toFixed(2)}, Lon: ${parseFloat($lon.value).toFixed(2)})</span>`;
-    $rankSection.classList.remove('hidden');
+    // Update pagination controls
+    if ($rankPagination) {
+      if (totalPages > 1) {
+        $rankPagination.classList.remove('hidden');
+        if ($btnRankPrev) $btnRankPrev.disabled = (page <= 1);
+        if ($btnRankNext) $btnRankNext.disabled = (page >= totalPages);
+
+        if ($rankPageIndicators) {
+          $rankPageIndicators.innerHTML = '';
+          for (let p = 1; p <= totalPages; p++) {
+            const btnPill = document.createElement('button');
+            btnPill.type = 'button';
+            btnPill.className = `page-pill ${p === page ? 'active' : ''}`;
+            btnPill.textContent = p;
+            btnPill.title = `Ir a página ${p} (${(p-1)*RANK_PAGE_SIZE+1}–${Math.min(p*RANK_PAGE_SIZE, totalItems)})`;
+            btnPill.addEventListener('click', () => {
+              renderRankPage(p);
+              $rankSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+            $rankPageIndicators.appendChild(btnPill);
+          }
+        }
+
+        if ($rankPageStatus) {
+          $rankPageStatus.textContent = `Cultivos ${startIdx + 1}–${endIdx} de ${totalItems}`;
+        }
+      } else {
+        $rankPagination.classList.add('hidden');
+      }
+    }
 
     // Trigger animations after paint
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         // Animate circle scores
-        document.querySelectorAll('.circle-score .fg').forEach(el => {
+        $rankGrid.querySelectorAll('.circle-score .fg').forEach(el => {
           el.style.strokeDashoffset = el.dataset.target;
         });
         // Animate score text counters
-        document.querySelectorAll('.circle-score .score-text').forEach(el => {
+        $rankGrid.querySelectorAll('.circle-score .score-text').forEach(el => {
           animateCounter(el, parseInt(el.dataset.target));
         });
         // Animate bar fills
-        document.querySelectorAll('.bar-fill').forEach(el => {
+        $rankGrid.querySelectorAll('.bar-fill').forEach(el => {
           el.style.width = el.dataset.target + '%';
         });
       });
