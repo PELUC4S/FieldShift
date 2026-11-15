@@ -63,10 +63,17 @@ def calcular_indicadores(df, lat, lon, inicio, fin):
     calor_anio = es_calor.groupby(anios).sum()
     calor_mes = es_calor.groupby([anios, df.index.month]).sum().groupby(level=1).mean()
     
+    data_quality = df.attrs.get("data_quality", "unknown")
+    data_source = df.attrs.get("source", "Fuente no identificada")
     result = {
         "location": {"latitude": lat, "longitude": lon},
         "period": {"start": inicio, "end": fin, "years": int(anios.nunique())},
-        "source": "NASA POWER (daily, community AG)",
+        "source": data_source,
+        "data_quality": data_quality,
+        "data_notice": (
+            "Datos sintéticos de contingencia; no son observaciones de NASA POWER."
+            if data_quality == "simulated" else None
+        ),
         "thresholds": {
             "frost_tmin_c": UMBRAL_HELADA_C,
             "heat_tmax_c": UMBRAL_CALOR_C,

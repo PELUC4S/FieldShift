@@ -2394,13 +2394,13 @@ footer {
       else if (surfacePct < 30) { surfStatus = 'Déficit hídrico'; surfClass = 'warning'; surfDesc = 'Capa superficial seca; monitorear o sembrar profundo.'; }
 
     const baseRoot = (0.28 * rainFactor) + ((locSeed % 5) - 2) * 0.015;
-    const rootVol = Math.round(Math.max(0.12, Math.min(0.50, baseRoot)) * 1000) / 1000;
-    const rootPct = Math.round((rootVol * 100 / 0.48) * 10) / 10;
-    const rootZ = Math.round(((rootVol - 0.28 * rainFactor) / 0.04) * 100) / 100;
+    rootVol = Math.round(Math.max(0.12, Math.min(0.50, baseRoot)) * 1000) / 1000;
+    rootPct = Math.round((rootVol * 100 / 0.48) * 10) / 10;
+    rootZ = Math.round(((rootVol - 0.28 * rainFactor) / 0.04) * 100) / 100;
     let rootStatus = 'Favorable', rootClass = 'optimal', rootDesc = 'Buena disponibilidad de agua útil en el primer metro.';
     if (rootPct >= 70) { rootStatus = 'Abundante'; rootClass = 'optimal'; rootDesc = 'Excelente recarga del perfil radicular; alta resiliencia.'; }
-    else if (rootPct < 40) { rootStatus = 'Regular'; rootClass = 'warning'; rootDesc = 'Reserva hídrica moderada; preferir cultivos con menor demanda.'; }
     else if (rootPct < 25) { rootStatus = 'Crítico'; rootClass = 'alert'; rootDesc = 'Perfil agotado; alto riesgo de estrés hídrico.'; }
+    else if (rootPct < 40) { rootStatus = 'Regular'; rootClass = 'warning'; rootDesc = 'Reserva hídrica moderada; preferir cultivos con menor demanda.'; }
 
     const rain30 = Math.round((Math.max(5, 75 * rainFactor * seasonFactor + ((locSeed % 19) - 9))) * 10) / 10;
     const et30 = Math.round((Math.max(20, 85 * seasonFactor + ((locSeed % 11) - 5))) * 10) / 10;
@@ -2416,7 +2416,9 @@ footer {
 
     return {
       spatial_cell: `${latR}_${lonR}`,
-      soil_profile: soil,
+      data_quality: "simulated",
+      data_notice: "Datos sintéticos de contingencia; no son observaciones satelitales.",
+      soil_profile: { ...soil, is_fallback: true, source: "Modelo regional sintético de contingencia (no SoilGrids)" },
       smap_soil_moisture: {
         surface_0_5cm: { volumetric_m3_m3: surfaceVol, percentage: surfacePct, status: surfStatus, status_class: surfClass, description: surfDesc },
         rootzone_0_100cm: { volumetric_m3_m3: rootVol, percentage: rootPct, anomaly_zscore: rootZ, status: rootStatus, status_class: rootClass, description: rootDesc }
@@ -2486,17 +2488,22 @@ footer {
       $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})`;
     }
 
-    $satGrid.innerHTML = `
+    const provenanceNotice = satData.data_notice || (satData.data_quality === 'simulated' ? 'Datos simulados; no son observaciones satelitales.' : '');
+    const qualityBanner = provenanceNotice
+      ? `<div class="sat-card" style="grid-column:1/-1;border-color:#e6a817;background:#fff8e1"><strong>⚠️ Calidad de datos</strong><div class="sat-card-sub">${provenanceNotice}</div></div>`
+      : '';
+
+    $satGrid.innerHTML = qualityBanner + `
       <div class="sat-card">
         <div class="sat-card-top">
           <span>💧 Humedad Superficie (0-5 cm)</span>
           <span class="sat-pill ${surfCls}">${isSurfFrozen ? '❄️ ' : ''}${surf.status || 'Adecuado'}</span>
         </div>
         <div class="sat-card-val">
-          ${surf.percentage || 0}% <small>(${surf.volumetric_m3_m3 || 0} m³/m³)</small>
+          ${surf.percentage ?? '—'}% <small>(${surf.volumetric_m3_m3 ?? '—'} m³/m³)</small>
         </div>
         <div class="sat-card-sub">${surf.description || 'Cama de siembra evaluada.'}</div>
-        <div class="sat-source">🛰️ NASA SMAP L3 Enhanced (9 km)</div>
+        <div class="sat-source">${surf.sensor || 'Fuente no especificada'}</div>
       </div>
 
       <div class="sat-card">
@@ -2505,10 +2512,10 @@ footer {
           <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${root.status || 'Favorable'}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
         </div>
         <div class="sat-card-val">
-          ${root.percentage || 0}% <small>(${root.volumetric_m3_m3 || 0} m³/m³)</small>
+          ${root.percentage ?? '—'}% <small>(${root.volumetric_m3_m3 ?? '—'} m³/m³)</small>
         </div>
         <div class="sat-card-sub">${root.description || 'Agua útil almacenada en perfil exploratorio.'}</div>
-        <div class="sat-source">🛰️ NASA SMAP L4 Global (9 km)</div>
+        <div class="sat-source">${root.sensor || 'Fuente no especificada'}</div>
       </div>
 
       <div class="sat-card">
@@ -2517,11 +2524,11 @@ footer {
           <span class="sat-pill ${wbCls}">${wb.drought_risk || 'Normal'}</span>
         </div>
         <div class="sat-card-val">
-          ${wb.net_water_balance_mm >= 0 ? '+' : ''}${wb.net_water_balance_mm || 0} mm
-          <small>SPI-3: ${wb.spi_3_months || 0}</small>
+          ${Number.isFinite(wb.net_water_balance_mm) ? (wb.net_water_balance_mm >= 0 ? '+' : '') + wb.net_water_balance_mm + ' mm' : 'Sin datos'}
+          <small>SPI-3: ${Number.isFinite(wb.spi_3_months) ? wb.spi_3_months : '—'}</small>
         </div>
-        <div class="sat-card-sub">Lluvia GPM: <strong>${wb.precipitation_gpm_mm || 0} mm</strong> · Consumo ETa: <strong>${wb.evapotranspiration_openet_mm || 0} mm</strong></div>
-        <div class="sat-source">🛰️ NASA GPM IMERG & OpenET (30 m)</div>
+        <div class="sat-card-sub">Lluvia: <strong>${Number.isFinite(wb.precipitation_gpm_mm) ? wb.precipitation_gpm_mm + ' mm' : 'Sin datos'}</strong> · ETa: <strong>${Number.isFinite(wb.evapotranspiration_openet_mm) ? wb.evapotranspiration_openet_mm + ' mm' : 'Sin datos'}</strong></div>
+        <div class="sat-source">${wb.precipitation_source || 'Fuente no especificada'} · ${wb.et_source || ''}</div>
       </div>
 
       <div class="sat-card">
@@ -2549,7 +2556,7 @@ footer {
           ESI ${veg.canopy_stress_esi || 0.70} <small>Evapotransp. Relativa</small>
         </div>
         <div class="sat-card-sub">Monitoreo multiespectral de canopia y estrés térmico hídrico.</div>
-        <div class="sat-source">🛰️ NASA HLS (30 m) & ECOSTRESS (70 m)</div>
+        <div class="sat-source">${veg.source || 'Fuente no especificada'}</div>
       </div>
     `;
 

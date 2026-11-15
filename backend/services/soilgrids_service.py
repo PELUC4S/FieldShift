@@ -82,7 +82,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
 
     # 1. Bioma Ártico / Boreal / Permafrost (Siberia, Norte de Canadá, Alaska, Escandinavia: |lat| >= 55)
     if abs(lat_r) >= 55.0:
-        source_name = "ISRIC SoilGrids / Bioma Criosol de Tundra (Permafrost)"
+        source_name = "Modelo de contingencia regional (no SoilGrids consultado)"
         clay_0_30 = 12.0
         sand_0_30 = 46.0
         silt_0_30 = 42.0
@@ -96,7 +96,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
 
     # 2. Desiertos Hiperáridos y Zonas Áridas Globales (Sahara, Arabia, Atacama, interior australiano)
     elif (15.0 <= lat_r <= 32.0 and -18.0 <= lon_r <= 55.0) or (abs(lat_r) >= 18.0 and abs(lat_r) <= 30.0 and -72.0 <= lon_r <= -68.0):
-        source_name = "ISRIC SoilGrids / Bioma Arenosol Desértico Aridisol"
+        source_name = "Modelo de contingencia regional (no SoilGrids consultado)"
         clay_0_30 = 3.5
         sand_0_30 = 91.0
         silt_0_30 = 5.5
@@ -109,7 +109,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
 
     # 3. Zonas Tropicales Húmedas / Ecuatoriales (|lat| <= 15)
     elif abs(lat_r) <= 15.0:
-        source_name = "ISRIC SoilGrids / Bioma Ferralsol/Oxisol Tropical"
+        source_name = "Modelo de contingencia regional (no SoilGrids consultado)"
         clay_0_30 = 44.0
         sand_0_30 = 30.0
         silt_0_30 = 26.0
@@ -122,7 +122,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
 
     # 4. Regiones Agrícolas Calibradas de Sudamérica (Argentina / Cono Sur)
     elif -35.5 <= lat_r <= -32.5 and -62.5 <= lon_r <= -59.0:
-        source_name = "SoilGrids (ISRIC) / Modelo Edafológico de Contingencia Calibrado"
+        source_name = "Modelo edafológico de contingencia calibrado (no SoilGrids consultado)"
         clay_0_30 = round(23.0 + ((seed % 5) - 2) * 0.8, 1)
         sand_0_30 = round(16.0 + ((seed % 7) - 3) * 0.6, 1)
         silt_0_30 = round(100.0 - clay_0_30 - sand_0_30, 1)
@@ -171,7 +171,7 @@ def _generate_soil_fallback(lat: float, lon: float) -> dict[str, Any]:
 
     # 5. Mollisol / Cambisol Templado Estándar Internacional
     else:
-        source_name = "SoilGrids (ISRIC) / Mollisol Templado Estándar"
+        source_name = "Modelo edafológico estándar de contingencia (no SoilGrids consultado)"
         clay_0_30 = 22.0
         sand_0_30 = 38.0
         silt_0_30 = 40.0
@@ -325,7 +325,7 @@ def query_soilgrids(lat: float, lon: float, timeout_s: float = 4.0) -> dict[str,
         raw_ph = get_weighted_0_30cm("phh2o")
 
         # Si los datos devueltos contienen valores válidos
-        if all(v is not None for v in [raw_clay, raw_silt, raw_sand, raw_soc, raw_ph]):
+        if all(v is not None for v in [raw_clay, raw_silt, raw_sand, raw_soc, raw_ph, raw_cc_0_30, raw_pmp_0_30, raw_cc_30_60, raw_pmp_30_60]):
             clay_pct = round(raw_clay / 10.0, 1)
             silt_pct = round(raw_silt / 10.0, 1)
             sand_pct = round(raw_sand / 10.0, 1)
