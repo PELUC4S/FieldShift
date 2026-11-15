@@ -66,10 +66,13 @@ def predecessor_compatibility(
     - razones: lista de strings explicando la decisión
     """
     if predecessor_key is None or predecessor_crop is None:
-        return 0.0, ["Sin antecesor – primer cultivo de la secuencia"]
+        return 0.0, ["🌱 Cultivo cabeza de rotación: apertura de ciclo con rusticidad edafoclimática"]
 
     bonus = 0.0
     reasons: list[str] = []
+
+    pred_name = predecessor_key.replace("_", " ").title() if predecessor_key else ""
+    curr_name = current_crop_key.replace("_", " ").title() if current_crop_key else ""
 
     # 1. good_predecessors / bad_predecessors explícitos
     good_preds = current_crop.get("good_predecessors", [])
@@ -77,10 +80,10 @@ def predecessor_compatibility(
 
     if predecessor_key in good_preds:
         bonus += ROTATION_BONUS * 0.4
-        reasons.append(f"✓ {predecessor_key} es buen antecesor para {current_crop_key}")
+        reasons.append(f"✓ {pred_name} es excelente antecesor para {curr_name}")
     if predecessor_key in bad_preds:
         bonus += ROTATION_PENALTY * 0.4
-        reasons.append(f"✗ {predecessor_key} es mal antecesor para {current_crop_key}")
+        reasons.append(f"✗ {pred_name} es antecesor desfavorable para {curr_name}")
 
     # 2. Alternancia gramínea ↔ leguminosa
     curr_cat = _get_category(current_crop)
@@ -257,7 +260,7 @@ def build_rotation(
                 rotation_bonus = rot_bonus
             else:
                 rotation_bonus = 0.0
-                compat_reasons = ["Primer cultivo seleccionado por el usuario"]
+                compat_reasons = ["🌱 Cultivo inicial seleccionado por el productor: apertura del ciclo de rotación"]
         else:
             # Función auxiliar para buscar el mejor cultivo que sea realmente viable (> 0)
             def _find_best_candidate(crop_dict: dict[str, dict], allow_any_viable_month: bool = False) -> dict | None:
@@ -404,29 +407,41 @@ def build_rotation(
 
     # Beneficios dinámicos agronómicos contextualizados
     benefits: list[str] = []
-    # Filtrar cultivos que sean biológicamente viables (> 10%) para no adjudicar beneficios a cultivos fallidos
-    viable_crops = [e for e in sequence if e.get("base_score", 0) >= 10.0 and e.get("crop_key") != "barbecho_cobertura"]
+    # Filtrar cultivos biológicamente viables (> 0%) en la secuencia
+    viable_crops = [
+        e for e in sequence
+        if max(e.get("base_score", 0), e.get("adjusted_score", 0), e.get("score", 0)) > 0.0
+        and e.get("crop_key") != "barbecho_cobertura"
+    ]
+
+    fixer_names = sorted(set(e["name"] for e in viable_crops if e["nitrogen_effect"] == "fijador"))
+    grass_names = sorted(set(e["name"] for e in viable_crops if "Gramínea" in e.get("crop_type", "")))
+    taproot_names = sorted(set(e["name"] for e in viable_crops if e.get("crop_key") in ["girasol", "colza", "papa"]))
+    viable_families = sorted(set(e["family"] for e in viable_crops if e.get("family")))
+    viable_crop_names = sorted(set(e["name"] for e in viable_crops))
 
     if is_patagonia or is_marginal:
-        if any(e["nitrogen_effect"] == "fijador" for e in viable_crops):
-            benefits.append("Fijación biológica de N en suelos pobres: el uso de leguminosas rústicas (vicia) aporta nitrógeno orgánico en aridisoles con bajo contenido de materia orgánica (< 1.5% MO).")
-        if any("Gramínea" in e["crop_type"] for e in viable_crops):
-            benefits.append("Mitigación de erosión eólica: el rastrojo y cobertura permanente de gramíneas rústicas protege la superficie contra la voladura por vientos fuertes de la estepa.")
-        if len(set(e["family"] for e in viable_crops)) >= 2:
-            benefits.append(f"Diversificación biológica ({', '.join(sorted(set(e['family'] for e in viable_crops)))}): ruptura de ciclos de plagas y cobertura adaptada al frío.")
+        if fixer_names:
+            benefits.append(f"Fijación biológica de N en suelos pobres: el uso de leguminosas rústicas ({', '.join(fixer_names)}) aporta nitrógeno orgánico en aridisoles con bajo contenido de materia orgánica (< 1.5% MO).")
+        if grass_names:
+            benefits.append(f"Mitigación de erosión eólica: el rastrojo denso y anclaje radicular de {', '.join(grass_names)} resguarda la superficie edáfica frente a la voladura por ráfagas intensas de la estepa.")
+        if len(viable_families) >= 2:
+            benefits.append(f"Diversificación biológica ({', '.join(viable_crop_names)}): ruptura del ciclo biológico de plagas e incremento de la tolerancia térmica ante heladas invernales.")
         if any(e.get("crop_key") == "barbecho_cobertura" for e in sequence):
-            benefits.append("Conservación de agua en el perfil: el descanso estacional acumula la escasa precipitación para el siguiente ciclo.")
+            benefits.append("Conservación de agua en el perfil: el descanso estacional acumula la escasa precipitación efectiva para el siguiente ciclo productivo.")
+        elif viable_crops and all(e.get("water_consumption") in ["Bajo", "Medio"] for e in viable_crops):
+            benefits.append("Eficiencia en el uso del agua: combinación estratégica de especies de consumo hídrico moderado a bajo, mitigando el déficit pluviométrico estival.")
         if not benefits:
-            benefits.append("Manejo conservacionista: secuencia orientada a la protección del recurso suelo y la captación de agua en zona árida.")
+            benefits.append("Manejo conservacionista: secuencia orientada a la protección del recurso suelo y la captación de agua en zona semiárida fría.")
     else:
-        if any(e["nitrogen_effect"] == "fijador" for e in viable_crops):
-            benefits.append("Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes de síntesis.")
-        if len(families_used) >= 2:
-            benefits.append(f"Diversificación biológica ({', '.join(sorted(families_used))}): corta ciclos de patógenos edáficos (ej. Fusarium) y malezas difíciles.")
-        if any("Gramínea" in e["crop_type"] for e in viable_crops):
-            benefits.append("Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión hídrica y eólica.")
-        if any(e["crop_key"] in ["girasol", "colza", "papa"] for e in viable_crops):
-            benefits.append("Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.")
+        if fixer_names:
+            benefits.append(f"Fijación biológica de N: la inclusión de {', '.join(fixer_names)} repone nitrógeno asimilable y disminuye los costos en fertilizantes de síntesis.")
+        if len(viable_families) >= 2:
+            benefits.append(f"Diversificación biológica ({', '.join(viable_families)}): corta ciclos de patógenos edáficos (ej. Fusarium, roya) y malezas tolerantes.")
+        if grass_names:
+            benefits.append(f"Aporte de rastrojo y cobertura: {', '.join(grass_names)} incrementa el carbono orgánico edáfico y resguarda la estructura del suelo contra la erosión hídrica y eólica.")
+        if taproot_names:
+            benefits.append(f"Exploración profunda del perfil: raíces pivotantes de {', '.join(taproot_names)} mejoran la macroporosidad y captación de humedad en estratos profundos.")
         if not benefits:
             benefits.append("Alternancia equilibrada entre ciclos de siembra y descansos estacionales.")
 

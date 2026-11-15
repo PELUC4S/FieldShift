@@ -1036,13 +1036,31 @@ main {
 
 .rot-total-score .sub { font-size: .8rem; color: #999; margin-top: .25rem; }
 
-.rot-list { list-style: none; }
+.rot-list { list-style: none; padding: 0; margin: 0; }
 .rot-list li {
   font-size: .88rem;
-  padding: .25rem 0;
+  line-height: 1.45;
+  padding: .35rem 0;
   display: flex;
-  align-items: baseline;
-  gap: .3rem;
+  align-items: flex-start;
+  gap: .5rem;
+}
+.rot-list li .bullet-dot {
+  color: var(--mid-green);
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+.rot-list.warnings-list li .bullet-dot {
+  color: var(--red);
+}
+.rot-list-text {
+  flex: 1;
+  color: var(--text-color);
+}
+.rot-list-text strong {
+  color: var(--dark-navy);
+  font-weight: 700;
 }
 
 .rot-list-title {
@@ -2113,13 +2131,15 @@ footer {
   }
 
   function clientPredecessorCompatibility(currKey, currCrop, predKey, predCrop) {
-    if (!predKey || !predCrop) return { bonus: 0, reasons: ['Primer cultivo de la secuencia'] };
+    if (!predKey || !predCrop) return { bonus: 0, reasons: ['🌱 Cultivo cabeza de rotación: apertura de ciclo con rusticidad edafoclimática'] };
     let bonus = 0;
     const reasons = [];
     const good = currCrop.good_predecessors || [];
     const bad = currCrop.bad_predecessors || [];
-    if (good.includes(predKey)) { bonus += 6; reasons.push(`✓ ${predKey} es buen antecesor para ${currKey}`); }
-    if (bad.includes(predKey)) { bonus -= 6; reasons.push(`✗ ${predKey} es mal antecesor para ${currKey}`); }
+    const pName = formatCropName(predKey);
+    const cName = formatCropName(currKey);
+    if (good.includes(predKey)) { bonus += 6; reasons.push(`✓ ${pName} es excelente antecesor para ${cName}`); }
+    if (bad.includes(predKey)) { bonus -= 6; reasons.push(`✗ ${pName} es antecesor desfavorable para ${cName}`); }
 
     const typeCat = t => t.includes('Gram') ? 'graminea' : (t.includes('Legum') ? 'leguminosa' : 'otra');
     const cCat = typeCat(currCrop.type || ''), pCat = typeCat(predCrop.type || '');
@@ -2127,7 +2147,7 @@ footer {
     else if (cCat === pCat && cCat !== 'otra') { bonus -= 2.5; reasons.push('✗ Misma categoría funcional consecutiva'); }
 
     if (currCrop.family && predCrop.family) {
-      if (currCrop.family === predCrop.family) { bonus -= 3; reasons.push(`✗ Misma familia (${currCrop.family})`); }
+      if (currCrop.family === predCrop.family) { bonus -= 3; reasons.push(`✗ Misma familia botánica (${currCrop.family})`); }
       else { bonus += 2.5; reasons.push(`✓ Rotación de familia (${predCrop.family} → ${currCrop.family})`); }
     }
 
@@ -2138,7 +2158,7 @@ footer {
       bonus += 2; reasons.push('✓ Fijador después de consumidor alto: recupera N');
     }
 
-    return { bonus: Math.max(-15, Math.min(15, bonus)), reasons: reasons.length ? reasons : ['Compatibilidad estándar'] };
+    return { bonus: Math.max(-15, Math.min(15, bonus)), reasons: reasons.length ? reasons : ['Compatibilidad neutral'] };
   }
 
   function clientTimingCompatible(predCrop, currCrop) {
@@ -2201,7 +2221,7 @@ footer {
           reasons = r;
         } else {
           rotBonus = 0;
-          reasons = ['Primer cultivo seleccionado por el usuario'];
+          reasons = ['🌱 Cultivo inicial seleccionado por el productor: apertura del ciclo de rotación'];
         }
       } else {
         // Buscador de mejor candidato con criterio de viabilidad biológica real (> 0)
@@ -2334,37 +2354,48 @@ footer {
     const isPatag = latVal <= -38.0;
     const isMarginal = avgScore < 35.0;
 
-    const viableCrops = sequence.filter(s => s.base_score >= 10.0 && s.crop_key !== 'barbecho_cobertura');
+    const viableCrops = sequence.filter(s => {
+      const sc = Math.max(s.base_score || 0, s.score || 0, s.adjusted_score || 0);
+      return sc > 0.0 && s.crop_key !== 'barbecho_cobertura';
+    });
+
+    const fixerCrops = [...new Set(viableCrops.filter(s => s.nitrogen_effect === 'fijador').map(s => s.name || formatCropName(s.crop)))];
+    const grassCrops = [...new Set(viableCrops.filter(s => (s.crop_type || '').includes('Gramínea')).map(s => s.name || formatCropName(s.crop)))];
+    const taprootCrops = [...new Set(viableCrops.filter(s => ['girasol', 'colza', 'papa'].includes(s.crop_key)).map(s => s.name || formatCropName(s.crop)))];
+    const viableFamilies = [...new Set(viableCrops.map(s => s.family).filter(Boolean))].sort();
+    const viableNames = [...new Set(viableCrops.map(s => s.name || formatCropName(s.crop)))].sort();
 
     const benefits = [];
     if (isPatag || isMarginal) {
-      if (viableCrops.some(s => s.nitrogen_effect === 'fijador')) {
-        benefits.append ? benefits.append('...') : benefits.push('Fijación biológica de N en suelos pobres: el uso de leguminosas rústicas (vicia) aporta nitrógeno orgánico en aridisoles con bajo contenido de materia orgánica (< 1.5% MO).');
+      if (fixerCrops.length) {
+        benefits.push(`Fijación biológica de N en suelos pobres: el uso de leguminosas rústicas (${fixerCrops.join(', ')}) aporta nitrógeno orgánico en aridisoles con bajo contenido de materia orgánica (< 1.5% MO).`);
       }
-      if (viableCrops.some(s => s.crop_type.includes('Gramínea'))) {
-        benefits.push('Mitigación de erosión eólica: el rastrojo y cobertura permanente de gramíneas rústicas protege la superficie contra la voladura por vientos fuertes de la estepa.');
+      if (grassCrops.length) {
+        benefits.push(`Mitigación de erosión eólica: el rastrojo denso y anclaje radicular de ${grassCrops.join(', ')} resguarda la superficie edáfica frente a la voladura por ráfagas intensas de la estepa.`);
       }
-      if (new Set(viableCrops.map(s => s.family)).size >= 2) {
-        benefits.push(`Diversificación biológica (${[...new Set(viableCrops.map(s => s.family))].sort().join(', ')}): ruptura de ciclos de plagas y cobertura adaptada al frío.`);
+      if (viableFamilies.length >= 2) {
+        benefits.push(`Diversificación biológica (${viableNames.join(', ')}): ruptura del ciclo biológico de plagas e incremento de la tolerancia térmica ante heladas invernales.`);
       }
       if (sequence.some(s => s.crop_key === 'barbecho_cobertura')) {
-        benefits.push('Conservación de agua en el perfil: el descanso estacional acumula la escasa precipitación para el siguiente ciclo.');
+        benefits.push('Conservación de agua en el perfil: el descanso estacional acumula la escasa precipitación efectiva para el siguiente ciclo productivo.');
+      } else if (viableCrops.length > 0 && viableCrops.every(s => ['Bajo', 'Medio'].includes(s.water_consumption))) {
+        benefits.push('Eficiencia en el uso del agua: combinación estratégica de especies de consumo hídrico moderado a bajo, mitigando el déficit pluviométrico estival.');
       }
       if (!benefits.length) {
-        benefits.push('Manejo conservacionista: secuencia orientada a la protección del recurso suelo y la captación de agua en zona árida.');
+        benefits.push('Manejo conservacionista: secuencia orientada a la protección del recurso suelo y la captación de agua en zona semiárida fría.');
       }
     } else {
-      if (viableCrops.some(s => s.nitrogen_effect === 'fijador')) {
-        benefits.push('Fijación biológica de N: el uso de leguminosas repone nitrógeno y reduce la dependencia de fertilizantes sintéticos.');
+      if (fixerCrops.length) {
+        benefits.push(`Fijación biológica de N: la inclusión de ${fixerCrops.join(', ')} repone nitrógeno asimilable y disminuye los costos en fertilizantes de síntesis.`);
       }
-      if (fams.length >= 2) {
-        benefits.push(`Diversificación biológica (${fams.join(', ')}): corta ciclos de patógenos edáficos y malezas tolerantes.`);
+      if (viableFamilies.length >= 2) {
+        benefits.push(`Diversificación biológica (${viableFamilies.join(', ')}): corta ciclos de patógenos edáficos (ej. Fusarium, roya) y malezas tolerantes.`);
       }
-      if (viableCrops.some(s => s.crop_type.includes('Gramínea'))) {
-        benefits.push('Aporte de rastrojo y cobertura: las gramíneas incrementan la materia orgánica y protegen contra la erosión.');
+      if (grassCrops.length) {
+        benefits.push(`Aporte de rastrojo y cobertura: ${grassCrops.join(', ')} incrementa el carbono orgánico edáfico y resguarda la estructura del suelo contra la erosión hídrica y eólica.`);
       }
-      if (viableCrops.some(s => ['girasol', 'colza', 'papa'].includes(s.crop_key))) {
-        benefits.push('Exploración profunda del perfil: raíces pivotantes mejoran la porosidad y captación de agua en capas profundas.');
+      if (taprootCrops.length) {
+        benefits.push(`Exploración profunda del perfil: raíces pivotantes de ${taprootCrops.join(', ')} mejoran la macroporosidad y captación de humedad en estratos profundos.`);
       }
       if (!benefits.length) {
         benefits.push('Alternancia equilibrada entre ciclos de siembra y descansos estacionales.');
@@ -3155,6 +3186,14 @@ footer {
         ? 'Ciclo 1 (Siguiente cultivo recomendado)'
         : `Ciclo ${i + 1}`;
 
+      let succBadgeHTML = '';
+      if (item.succession_reason) {
+        const firstReason = item.succession_reason.split('|')[0].trim();
+        const icon = firstReason.startsWith('✓') ? '✓ ' : (firstReason.startsWith('✗') ? '✗ ' : (firstReason.startsWith('🌱') ? '' : '💡 '));
+        const cleanText = firstReason.replace(/^[✓✗💡🌱\s]+/, '').trim();
+        succBadgeHTML = `<div class="tl-succ-badge" title="${item.succession_reason}">${icon}${cleanText}</div>`;
+      }
+
       card.innerHTML = `
         <div class="cycle-label">${cycleTitle}</div>
         <div class="crop-emoji">${getEmoji(name)}</div>
@@ -3162,7 +3201,7 @@ footer {
         <div class="period">${plantLabel}${harvestLabel ? ' → ' + harvestLabel : ''}</div>
         <div class="tl-score" style="color:${scoreColor(score)}">${score}%</div>
         ${bonusHTML}
-        ${item.succession_reason ? `<div class="tl-succ-badge" title="${item.succession_reason}">💡 ${item.succession_reason.split('|')[0].trim()}</div>` : ''}
+        ${succBadgeHTML}
       `;
 
       $timeline.appendChild(card);
@@ -3183,19 +3222,31 @@ footer {
       let benefitsHTML = '';
       let warningsHTML = '';
 
+      const formatListItem = (item) => {
+        if (!item) return '';
+        const text = String(item).trim();
+        const colonIdx = text.indexOf(':');
+        if (colonIdx > 0 && colonIdx < 65) {
+          const title = text.slice(0, colonIdx).trim();
+          const desc = text.slice(colonIdx + 1).trim();
+          return `<strong>${title}:</strong> ${desc}`;
+        }
+        return text;
+      };
+
       if (benefits.length) {
         benefitsHTML = `
           <div>
-            <div class="rot-list-title benefits">✅ Beneficios</div>
-            <ul class="rot-list">${benefits.map(b => `<li><span>•</span> ${b}</li>`).join('')}</ul>
+            <div class="rot-list-title benefits">✅ Beneficios Agronómicos</div>
+            <ul class="rot-list">${benefits.map(b => `<li><span class="bullet-dot">•</span><div class="rot-list-text">${formatListItem(b)}</div></li>`).join('')}</ul>
           </div>`;
       }
 
       if (warnings.length) {
         warningsHTML = `
           <div>
-            <div class="rot-list-title warnings">⚠️ Advertencias</div>
-            <ul class="rot-list">${warnings.map(w => `<li><span>•</span> ${w}</li>`).join('')}</ul>
+            <div class="rot-list-title warnings">⚠️ Advertencias y Riesgos</div>
+            <ul class="rot-list warnings-list">${warnings.map(w => `<li><span class="bullet-dot">•</span><div class="rot-list-text">${formatListItem(w)}</div></li>`).join('')}</ul>
           </div>`;
       }
 
