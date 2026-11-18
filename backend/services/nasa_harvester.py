@@ -246,6 +246,14 @@ def get_satellite_readings(lat: float, lon: float, climate_data: Optional[dict[s
     if not readings:
         readings = calculate_satellite_metrics(lat_r, lon_r, climate_data)
         try:
+            cached_sat = list(CACHE_DIR.glob("satelite_*.json"))
+            if len(cached_sat) >= 500:
+                cached_sat.sort(key=lambda f: f.stat().st_mtime)
+                for old_file in cached_sat[:50]:
+                    try:
+                        old_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
             cache_file.write_text(json.dumps(readings, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
             logger.warning(f"No se pudo guardar caché satelital {cache_file}: {e}")

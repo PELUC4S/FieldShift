@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Cultivito — Predicción de Rotación de Cultivos</title>
 <!-- Leaflet.js para mapa dinámico interactivo con capas Satelital y Callejero -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -1561,6 +1563,17 @@ footer {
 (function() {
   'use strict';
 
+  // ──── Security: HTML Entity Sanitizer (Prevents DOM XSS) ────
+  function escapeHTML(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ──── Constants ────
   const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   // Backend en producción en la nube (Render / Cloud Run) con SSL (HTTPS)
@@ -3030,7 +3043,7 @@ footer {
 
     if ($satCellCoord) {
       const fallbackBadge = isSoilFallback ? ' <span style="font-size:0.72rem;background:#fff3cd;color:#856404;border:1px solid #ffeeba;padding:1px 5px;border-radius:4px;margin-left:4px">⚠️ Estimado regional</span>' : '';
-      $satCellCoord.innerHTML = `📍 Celda: <strong>${satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`}</strong> | Suelo: <strong>${usdaClass}</strong> (${soilSrc})${fallbackBadge}`;
+      $satCellCoord.innerHTML = `📍 Celda: <strong>${escapeHTML(satData.spatial_cell || `${parseFloat($lat.value).toFixed(2)}_${parseFloat($lon.value).toFixed(2)}`)}</strong> | Suelo: <strong>${escapeHTML(usdaClass)}</strong> (${escapeHTML(soilSrc)})${fallbackBadge}`;
     }
 
     const rootPctVal = root.percentage != null ? Number(root.percentage) : 0;
@@ -3047,63 +3060,63 @@ footer {
       <div class="sat-card">
         <div class="sat-card-top">
           <span>💧 Humedad Superficie (0-5 cm)</span>
-          <span class="sat-pill ${surfCls}">${isSurfFrozen ? '❄️ ' : ''}${surf.status || 'Adecuado'}</span>
+          <span class="sat-pill ${escapeHTML(surfCls)}">${isSurfFrozen ? '❄️ ' : ''}${escapeHTML(surf.status || 'Adecuado')}</span>
         </div>
         <div class="sat-card-val">
-          ${surf.percentage || 0}% <small>AU (${surf.volumetric_m3_m3 || 0} m³/m³)</small>
+          ${Number(surf.percentage) || 0}% <small>AU (${Number(surf.volumetric_m3_m3) || 0} m³/m³)</small>
         </div>
-        <div class="sat-card-sub">${surf.description || 'Cama de siembra evaluada.'}</div>
+        <div class="sat-card-sub">${escapeHTML(surf.description || 'Cama de siembra evaluada.')}</div>
         <div class="sat-source">🛰️ NASA SMAP L3 Enhanced (9 km)</div>
       </div>
 
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🌱 Humedad Radicular (0-100 cm)</span>
-          <span class="sat-pill ${rootCls}">${isRootFrozen ? '❄️ ' : ''}${rootLabel}${!isRootFrozen ? ` (Z: ${root.anomaly_zscore >= 0 ? '+' : ''}${root.anomaly_zscore || 0})` : ''}</span>
+          <span class="sat-pill ${escapeHTML(rootCls)}">${isRootFrozen ? '❄️ ' : ''}${escapeHTML(rootLabel)}${!isRootFrozen ? ` (Z: ${Number(root.anomaly_zscore) >= 0 ? '+' : ''}${Number(root.anomaly_zscore) || 0})` : ''}</span>
         </div>
         <div class="sat-card-val">
-          ${rootPctVal}% <small>AU (${root.volumetric_m3_m3 ?? 0} m³/m³)</small>
+          ${rootPctVal}% <small>AU (${Number(root.volumetric_m3_m3) || 0} m³/m³)</small>
         </div>
-        <div class="sat-card-sub">${rootDescription}</div>
+        <div class="sat-card-sub">${escapeHTML(rootDescription)}</div>
         <div class="sat-source">🛰️ NASA SMAP L4 Global (9 km)</div>
       </div>
 
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🌦️ Balance Hídrico 30d</span>
-          <span class="sat-pill ${wbCls}">${wb.drought_risk || 'Normal'}</span>
+          <span class="sat-pill ${escapeHTML(wbCls)}">${escapeHTML(wb.drought_risk || 'Normal')}</span>
         </div>
         <div class="sat-card-val">
-          ${wb.net_water_balance_mm >= 0 ? '+' : ''}${wb.net_water_balance_mm || 0} mm
-          <small>SPI-3: ${wb.spi_3_months || 0}</small>
+          ${Number(wb.net_water_balance_mm) >= 0 ? '+' : ''}${Number(wb.net_water_balance_mm) || 0} mm
+          <small>SPI-3: ${Number(wb.spi_3_months) || 0}</small>
         </div>
-        <div class="sat-card-sub">Lluvia GPM: <strong>${wb.precipitation_gpm_mm || 0} mm</strong> · Consumo ETa: <strong>${wb.evapotranspiration_openet_mm || 0} mm</strong></div>
+        <div class="sat-card-sub">Lluvia GPM: <strong>${Number(wb.precipitation_gpm_mm) || 0} mm</strong> · Consumo ETa: <strong>${Number(wb.evapotranspiration_openet_mm) || 0} mm</strong></div>
         <div class="sat-source">🛰️ NASA GPM IMERG & OpenET (30 m)</div>
       </div>
 
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🏔️ Suelo & Edafología ISRIC</span>
-          <span class="sat-pill ${isSoilFallback ? 'warning' : 'optimal'}">${isSoilFallback ? '⚠️ Estimado' : usdaClass}</span>
+          <span class="sat-pill ${isSoilFallback ? 'warning' : 'optimal'}">${isSoilFallback ? '⚠️ Estimado' : escapeHTML(usdaClass)}</span>
         </div>
         <div class="sat-card-val">
-          AWC ${awcTotal} mm <small>(0-60 cm)</small>
+          AWC ${Number(awcTotal) || 0} mm <small>(0-60 cm)</small>
         </div>
         <div class="sat-card-sub">
-          Textura: <strong>Arcilla ${clayPct}% · Limo ${siltPct}% · Arena ${sandPct}%</strong><br>
-          Retención: 0-30cm: <strong>${awc030} mm</strong> | 30-60cm: <strong>${awc3060} mm</strong><br>
-          Fertilidad: SOC <strong>${socVal} g/kg</strong> (%MO: <strong>${omVal}%</strong> · ${fertLevel}) · pH: <strong>${phVal}</strong> (${phClass})
+          Textura: <strong>Arcilla ${Number(clayPct) || 0}% · Limo ${Number(siltPct) || 0}% · Arena ${Number(sandPct) || 0}%</strong><br>
+          Retención: 0-30cm: <strong>${Number(awc030) || 0} mm</strong> | 30-60cm: <strong>${Number(awc3060) || 0} mm</strong><br>
+          Fertilidad: SOC <strong>${Number(socVal) || 0} g/kg</strong> (%MO: <strong>${Number(omVal) || 0}%</strong> · ${escapeHTML(fertLevel)}) · pH: <strong>${Number(phVal) || 0}</strong> (${escapeHTML(phClass)})
         </div>
-        <div class="sat-source">${isSoilFallback ? '⚠️ Contingencia regional (ISRIC no disponible)' : `🌍 ${soilSrc}`}</div>
+        <div class="sat-source">${isSoilFallback ? '⚠️ Contingencia regional (ISRIC no disponible)' : `🌍 ${escapeHTML(soilSrc)}`}</div>
       </div>
 
       <div class="sat-card">
         <div class="sat-card-top">
           <span>🌿 Vigor Vegetal & Estrés Canopia</span>
-          <span class="sat-pill optimal">NDVI ${veg.estimated_ndvi || 0.45}</span>
+          <span class="sat-pill optimal">NDVI ${Number(veg.estimated_ndvi) || 0.45}</span>
         </div>
         <div class="sat-card-val">
-          ESI ${veg.canopy_stress_esi || 0.70} <small>Evapotransp. Relativa</small>
+          ESI ${Number(veg.canopy_stress_esi) || 0.70} <small>Evapotransp. Relativa</small>
         </div>
         <div class="sat-card-sub">Monitoreo multiespectral de canopia y estrés térmico hídrico.</div>
         <div class="sat-source">🛰️ NASA HLS (30 m) & ECOSTRESS (70 m)</div>
@@ -3314,11 +3327,18 @@ footer {
       card.className = `crop-card score-${cls}`;
       card.style.animationDelay = `${localIdx * 0.06}s`;
 
+      const safeName = escapeHTML(formatCropName(name));
+      const safeKey = escapeHTML(crop.crop_key || crop.crop || name);
+      const safePredNote = crop.predecessor_note ? `<div class="crop-pred-note">💡 ${escapeHTML(crop.predecessor_note)}</div>` : '';
+      const safeSoilRationale = (crop.soil_rationale && crop.soil_rationale.length) 
+        ? `<div class="crop-soil-note">${crop.soil_rationale.map(r => escapeHTML(r)).join('<br>')}</div>` 
+        : '';
+
       card.innerHTML = `
         <div class="card-header">
           <div class="card-crop-name">
             <span class="emoji">${getEmoji(name)}</span>
-            <span class="name">#${globalIdx + 1} ${formatCropName(name)}</span>
+            <span class="name">#${globalIdx + 1} ${safeName}</span>
           </div>
           <div class="circle-score">
             <svg viewBox="0 0 56 56">
@@ -3334,13 +3354,13 @@ footer {
         </div>
 
         <div class="card-badges">
-          ${type ? `<span class="badge ${typeBadgeClass(type)}">${type}</span>` : ''}
+          ${type ? `<span class="badge ${typeBadgeClass(type)}">${escapeHTML(type)}</span>` : ''}
           ${water ? `<span class="water-indicator">${waterDrops(water)}</span>` : ''}
           ${crop.rotation_bonus ? `<span class="badge-antecesor ${crop.rotation_bonus > 0 ? 'pos' : 'neg'}">${crop.rotation_bonus > 0 ? '▲ +' : '▼ '}${crop.rotation_bonus} antecesor</span>` : ''}
         </div>
 
-        ${crop.predecessor_note ? `<div class="crop-pred-note">💡 ${crop.predecessor_note}</div>` : ''}
-        ${crop.soil_rationale && crop.soil_rationale.length ? `<div class="crop-soil-note">${crop.soil_rationale.join('<br>')}</div>` : ''}
+        ${safePredNote}
+        ${safeSoilRationale}
 
         <div class="breakdown">
           ${barRow('🌡️', 'Temp', tempFit)}
@@ -3350,8 +3370,8 @@ footer {
           ${barRow('📊', 'Variab.', rainVar, true)}
         </div>
 
-        <button type="button" class="btn-select-crop" data-crop="${crop.crop_key || crop.crop || name}">
-          🔄 Simular rotación iniciando con ${formatCropName(name)} ➔
+        <button type="button" class="btn-select-crop" data-crop="${safeKey}">
+          🔄 Simular rotación iniciando con ${safeName} ➔
         </button>
       `;
 
@@ -3460,15 +3480,17 @@ footer {
       if (prevCrops && prevCrops.length > 0) {
         const pills = prevCrops.map((c, idx) => {
           const tag = idx === 0 ? 'Antecesor directo' : `${idx + 1}º previo`;
-          return `<span class="hist-pill" title="${tag}">${getEmoji(c)} ${formatCropName(c)} <small style="opacity:.75">(${tag})</small></span>`;
+          const safeC = escapeHTML(formatCropName(c));
+          return `<span class="hist-pill" title="${escapeHTML(tag)}">${getEmoji(c)} ${safeC} <small style="opacity:.75">(${escapeHTML(tag)})</small></span>`;
         }).reverse().join('<span class="hist-arrow">➔</span>');
 
+        const targetCropName = sequence.length > 0 ? getEmoji(sequence[0].crop) + ' ' + escapeHTML(formatCropName(sequence[0].crop)) : 'Por determinar';
         $histBanner.innerHTML = `
           <div class="history-banner">
             <span class="history-banner-title">🌱 Historial considerado:</span>
             ${pills}
             <span class="hist-arrow">➔</span>
-            <span class="hist-pill target">🎯 Siguiente ciclo recomendado: ${sequence.length > 0 ? getEmoji(sequence[0].crop) + ' ' + formatCropName(sequence[0].crop) : 'Por determinar'}</span>
+            <span class="hist-pill target">🎯 Siguiente ciclo recomendado: ${targetCropName}</span>
           </div>
         `;
         $histBanner.classList.remove('hidden');
@@ -3509,14 +3531,14 @@ footer {
         const firstReason = item.succession_reason.split('|')[0].trim();
         const icon = firstReason.startsWith('✓') ? '✓ ' : (firstReason.startsWith('✗') ? '✗ ' : (firstReason.startsWith('🌱') ? '' : '💡 '));
         const cleanText = firstReason.replace(/^[✓✗💡🌱\s]+/, '').trim();
-        succBadgeHTML = `<div class="tl-succ-badge" title="${item.succession_reason}">${icon}${cleanText}</div>`;
+        succBadgeHTML = `<div class="tl-succ-badge" title="${escapeHTML(item.succession_reason)}">${icon}${escapeHTML(cleanText)}</div>`;
       }
 
       card.innerHTML = `
-        <div class="cycle-label">${cycleTitle}</div>
+        <div class="cycle-label">${escapeHTML(cycleTitle)}</div>
         <div class="crop-emoji">${getEmoji(name)}</div>
-        <div class="crop-name">${formatCropName(name)}</div>
-        <div class="period">${plantLabel}${harvestLabel ? ' → ' + harvestLabel : ''}</div>
+        <div class="crop-name">${escapeHTML(formatCropName(name))}</div>
+        <div class="period">${escapeHTML(plantLabel)}${harvestLabel ? ' → ' + escapeHTML(harvestLabel) : ''}</div>
         <div class="tl-score" style="color:${scoreColor(score)}">${score}%</div>
         ${bonusHTML}
         ${succBadgeHTML}
@@ -3545,11 +3567,11 @@ footer {
         const text = String(item).trim();
         const colonIdx = text.indexOf(':');
         if (colonIdx > 0 && colonIdx < 65) {
-          const title = text.slice(0, colonIdx).trim();
-          const desc = text.slice(colonIdx + 1).trim();
+          const title = escapeHTML(text.slice(0, colonIdx).trim());
+          const desc = escapeHTML(text.slice(colonIdx + 1).trim());
           return `<strong>${title}:</strong> ${desc}`;
         }
-        return text;
+        return escapeHTML(text);
       };
 
       if (benefits.length) {

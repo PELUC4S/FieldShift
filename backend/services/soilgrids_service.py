@@ -445,6 +445,14 @@ def query_soilgrids(lat: float, lon: float, timeout_s: float = 8.0) -> dict[str,
             }
 
             try:
+                cached_suelo = list(CACHE_DIR.glob("suelo_*.json"))
+                if len(cached_suelo) >= 500:
+                    cached_suelo.sort(key=lambda f: f.stat().st_mtime)
+                    for old_file in cached_suelo[:50]:
+                        try:
+                            old_file.unlink(missing_ok=True)
+                        except Exception:
+                            pass
                 cache_file.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
             except Exception as e:
                 logger.warning(f"Error escribiendo caché de suelo: {e}")

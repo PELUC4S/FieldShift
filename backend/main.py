@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import requests
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -43,6 +43,7 @@ DATA_DIR = BASE_DIR / "data"
 CACHE_DIR = DATA_DIR / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
+MAX_CACHE_FILES = 500
 
 app = FastAPI(
     title="FieldShift API — Predicción de Rotación de Cultivos",
@@ -50,17 +51,56 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Middleware CORS permisivo para desarrollo y producción
+# Middleware de Cabeceras de Seguridad HTTP (Hardening defensivo)
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
+# Orígenes explícitamente permitidos (sin comodín con credenciales)
+ALLOWED_ORIGINS = [
+    "https://peluc4s.github.io",
+    "https://fieldshift-api.onrender.com",
+    "http://localhost:8088",
+    "http://127.0.0.1:8088",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.github\.io$|^https://.*\.onrender\.com$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "Origin", "User-Agent"],
 )
 
 
-# ─── Helper de acceso a datos climáticos con caché ──────────────────────────
+# ─── Helper de acceso a datos climáticos con caché y protección DoS ─────────
+
+def _safe_write_cache(file_path: Path, data: dict[str, Any]) -> None:
+    """Escribe en caché asegurando un límite máximo de archivos en disco para mitigar DoS por agotamiento de inodos."""
+    try:
+        cached_files = list(CACHE_DIR.glob("clima_*.json"))
+        if len(cached_files) >= MAX_CACHE_FILES:
+            # Desalojo LRU defensivo: eliminar el 10% más antiguo
+            cached_files.sort(key=lambda f: f.stat().st_mtime)
+            for old_file in cached_files[:max(1, len(cached_files) // 10)]:
+                try:
+                    old_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
+        file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as err:
+        logger.warning(f"No se pudo escribir en caché seguro {file_path.name}: {err}")
+
 
 def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
     """
@@ -84,9 +124,7 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
     try:
         df = obtener_clima(lat_r, lon_r, INICIO, FIN)
         resultado = calcular_indicadores(df, lat_r, lon_r, INICIO, FIN)
-        archivo_cache.write_text(
-            json.dumps(resultado, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _safe_write_cache(archivo_cache, resultado)
         resultado["soil_profile"] = query_soilgrids(lat_r, lon_r)
         resultado["satellite_indicators"] = get_satellite_readings(lat_r, lon_r, resultado)
         return resultado
@@ -142,15 +180,15 @@ class RotationRequest(BaseModel):
     longitude: float = Field(..., ge=-180, le=180, description="Longitud del lote")
     start_month: int = Field(default=10, ge=1, le=12, description="Mes inicial de planificación (1-12)")
     num_cycles: int = Field(default=3, ge=1, le=10, description="Cantidad de ciclos o cultivos sucesivos en la rotación")
-    first_crop_key: Optional[str] = Field(default=None, description="Clave de cultivo inicial forzado")
+    first_crop_key: Optional[str] = Field(default=None, max_length=30, description="Clave de cultivo inicial forzado")
     weights: Optional[dict[str, float]] = Field(default=None, description="Ponderación de factores")
-    previous_crops: Optional[list[str]] = Field(default=None, description="Lista opcional de hasta 3 cultivos anteriores [1º más reciente, 2º, 3º]")
+    previous_crops: Optional[list[str]] = Field(default=None, max_length=5, description="Lista opcional de hasta 3-5 cultivos anteriores [1º más reciente, 2º, 3º]")
 
 
 class CompareRequest(BaseModel):
-    latitude: float
-    longitude: float
-    current_rotation: list[str]
+    latitude: float = Field(..., ge=-90, le=90, description="Latitud del lote")
+    longitude: float = Field(..., ge=-180, le=180, description="Longitud del lote")
+    current_rotation: list[str] = Field(..., max_length=15, description="Lista de cultivos de la rotación a comparar")
     priorities: Priorities = Priorities()
 
 
@@ -190,7 +228,7 @@ def get_ranking(
     lon: float = Query(..., ge=-180, le=180, description="Longitud del lote"),
     planting_month: int = Query(..., ge=1, le=12, description="Mes de siembra previsto (1=Enero... 12=Diciembre)"),
     cycle_months: int = Query(default=4, ge=2, le=8, description="Duración promedio del ciclo en meses"),
-    previous_crops: Optional[str] = Query(default=None, description="Cultivos anteriores separados por comas (hasta 3), ej: 'soja,trigo,maiz'"),
+    previous_crops: Optional[str] = Query(default=None, max_length=150, description="Cultivos anteriores separados por comas (hasta 3), ej: 'soja,trigo,maiz'"),
 ):
     """
     Calcula de forma probabilística la aptitud de cada semilla de acuerdo a los datos
@@ -198,7 +236,7 @@ def get_ranking(
     Si se indican cultivos anteriores, evalúa la compatibilidad agronómica sucesoria.
     """
     climate_data = get_climate_data(lat, lon)
-    prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()] if previous_crops else None
+    prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()][:5] if previous_crops else None
     soil_prof = climate_data.get("soil_profile") or query_soilgrids(lat, lon)
     ranking = rank_crops(
         climate_data=climate_data,
@@ -228,20 +266,21 @@ def create_rotation(req: RotationRequest):
     de nitrógeno, rotación de familias botánicas y ventanas de siembra.
     """
     climate_data = get_climate_data(req.latitude, req.longitude)
+    clean_prev = [c.strip()[:30] for c in req.previous_crops if c.strip()][:5] if req.previous_crops else None
     rotation_plan = build_rotation(
         climate_data=climate_data,
         num_cycles=req.num_cycles,
         start_month=req.start_month,
         first_crop_key=req.first_crop_key,
         weights=req.weights,
-        previous_crops=req.previous_crops,
+        previous_crops=clean_prev,
     )
     return rotation_plan
 
 
 @app.get("/api/v1/next-crop", tags=["Rotación"])
 def get_next_crop(
-    predecessor: str = Query(..., description="Cultivo cosechado (antecesor, ej. 'soja', 'trigo', 'maiz')"),
+    predecessor: str = Query(..., max_length=30, description="Cultivo cosechado (antecesor, ej. 'soja', 'trigo', 'maiz')"),
     planting_month: int = Query(..., ge=1, le=12, description="Mes en que se prevé la siembra del siguiente cultivo"),
     lat: float = Query(default=-31.42, ge=-90, le=90, description="Latitud"),
     lon: float = Query(default=-64.18, ge=-180, le=180, description="Longitud"),
@@ -314,7 +353,7 @@ def get_field_analytics_endpoint(
     planting_month: int = Query(default=10, ge=1, le=12, description="Mes de siembra previsto (1-12)"),
     cycle_months: int = Query(default=4, ge=2, le=8, description="Duración promedio del ciclo en meses"),
     num_cycles: int = Query(default=3, ge=1, le=10, description="Cantidad de ciclos o cultivos sucesivos en la rotación"),
-    previous_crops: Optional[str] = Query(default=None, description="Cultivos anteriores separados por comas (hasta 3), ej: 'soja,trigo,maiz'"),
+    previous_crops: Optional[str] = Query(default=None, max_length=150, description="Cultivos anteriores separados por comas (hasta 3), ej: 'soja,trigo,maiz'"),
 ):
     """
     Retorna el informe integral de analítica agronómica y satelital (Field Analytics):
@@ -322,7 +361,7 @@ def get_field_analytics_endpoint(
     ranking y rotación sucesoria óptima con justificación técnica.
     """
     climate_data = get_climate_data(lat, lon)
-    prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()] if previous_crops else None
+    prev_list = [p.strip() for p in previous_crops.split(",") if p.strip()][:5] if previous_crops else None
 
     ranking = rank_crops(
         climate_data=climate_data,
