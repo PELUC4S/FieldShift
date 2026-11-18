@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
 
 import requests
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 try:
     from analysis.indicators import calcular_indicadores, ensure_monthly_normals
@@ -45,13 +48,62 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 MAX_CACHE_FILES = 500
 
+# Detección de entorno de producción (desactiva Swagger y debug en producción)
+IS_PROD = os.getenv("ENVIRONMENT", "").lower() in ["production", "prod"] or os.getenv("RENDER") == "true"
+
 app = FastAPI(
     title="FieldShift API — Predicción de Rotación de Cultivos",
     description="API AgTech para evaluación probabilística de semillas y optimización de rotación de cultivos basada en NASA POWER.",
     version="1.0.0",
+    docs_url=None if IS_PROD else "/docs",
+    redoc_url=None if IS_PROD else "/redoc",
+    openapi_url=None if IS_PROD else "/openapi.json",
 )
 
-# Middleware de Cabeceras de Seguridad HTTP (Hardening defensivo)
+# ─── Middleware 1: Rate Limiting & Bot Protection ──────────────────────────
+RATE_LIMIT_WINDOW = 60  # Ventana de 60 segundos
+RATE_LIMIT_MAX_REQUESTS = 60  # Máximo 60 peticiones por minuto por IP
+_request_records: dict[str, list[float]] = defaultdict(list)
+
+# Firmas de User-Agents de escáners automáticos conocidos a bloquear
+BLOCKED_USER_AGENTS = {
+    "sqlmap", "nikto", "masscan", "nmap", "dirbuster", "acunetix", "havij", "zgrab"
+}
+
+@app.middleware("http")
+async def rate_limiting_and_bot_protection(request: Request, call_next):
+    # 1. Protección contra bots y escáners maliciosos
+    ua = request.headers.get("user-agent", "").lower()
+    if any(bot in ua for bot in BLOCKED_USER_AGENTS):
+        logger.warning(f"Bloqueado bot/scanner por User-Agent sospechoso: {ua}")
+        return Response(
+            content=json.dumps({"detail": "Acceso denegado"}),
+            status_code=403,
+            media_type="application/json"
+        )
+
+    # 2. Rate limiting por IP del cliente
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+
+    # Limitar solo endpoints de cómputo API
+    if request.url.path.startswith("/api/") or request.url.path in ["/climate", "/compare"]:
+        now = time.time()
+        _request_records[client_ip] = [t for t in _request_records[client_ip] if now - t < RATE_LIMIT_WINDOW]
+
+        if len(_request_records[client_ip]) >= RATE_LIMIT_MAX_REQUESTS:
+            logger.warning(f"Rate limit excedido para IP: {client_ip}")
+            return Response(
+                content=json.dumps({"detail": "Demasiadas peticiones. Por favor, reintente en unos instantes."}),
+                status_code=429,
+                media_type="application/json",
+                headers={"Retry-After": "60"}
+            )
+        _request_records[client_ip].append(now)
+
+    return await call_next(request)
+
+# ─── Middleware 2: Cabeceras de Seguridad HTTP (Hardening defensivo) ────────
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -59,7 +111,18 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=*"
     return response
+
+# ─── Manejador Global de Excepciones (Sin fuga de datos internos) ───────────
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Error interno no controlado en {request.method} {request.url.path}: {exc}", exc_info=True)
+    return Response(
+        content=json.dumps({"detail": "Ocurrió un error interno al procesar su solicitud. Intente nuevamente."}),
+        status_code=500,
+        media_type="application/json"
+    )
 
 # Orígenes explícitamente permitidos (sin comodín con credenciales)
 ALLOWED_ORIGINS = [
@@ -168,6 +231,7 @@ def get_climate_data(lat: float, lon: float) -> dict[str, Any]:
 # ─── Modelos Pydantic ───────────────────────────────────────────────────────
 
 class Priorities(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     water_availability: int = Field(default=3, ge=1, le=5)
     climate_risk: int = Field(default=3, ge=1, le=5)
     soil_cover: int = Field(default=3, ge=1, le=5)
@@ -176,6 +240,7 @@ class Priorities(BaseModel):
 
 
 class RotationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     latitude: float = Field(..., ge=-90, le=90, description="Latitud del lote")
     longitude: float = Field(..., ge=-180, le=180, description="Longitud del lote")
     start_month: int = Field(default=10, ge=1, le=12, description="Mes inicial de planificación (1-12)")
@@ -186,6 +251,7 @@ class RotationRequest(BaseModel):
 
 
 class CompareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     latitude: float = Field(..., ge=-90, le=90, description="Latitud del lote")
     longitude: float = Field(..., ge=-180, le=180, description="Longitud del lote")
     current_rotation: list[str] = Field(..., max_length=15, description="Lista de cultivos de la rotación a comparar")
