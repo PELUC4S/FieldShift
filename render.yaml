@@ -1,7 +1,7 @@
 services:
   - type: web
     name: fieldshift-api
-    env: python
+    runtime: python
     region: oregon
     plan: free
     branch: version2
