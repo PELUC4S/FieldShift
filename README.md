@@ -5,7 +5,7 @@
 
 1. **Probabilistically evaluate and rank (0–100%)** the suitability of 15 agricultural crops based on the field's exact GPS coordinates and the sowing window.
 2. **Monitor real-time satellite soil conditions:** Surface moisture for seedbed conditions ($0\text{--}5\text{ cm}$) and root-zone water storage ($0\text{--}100\text{ cm}$) via NASA SMAP, 30-day water balance via NASA GPM / OpenET, and NDVI vegetation index via NASA HLS.
-3. **Optimize the crop rotation sequence**, allowing users to optionally enter up to **3 predecessor crops** to calculate the most recommended crop for the next cycle (nitrogen balance, grass-legume alternation, monoculture disruption, and botanical family rotation).
+3. **Optimize the crop rotation sequence**, allowing users to enter predecessor crops to calculate the most recommended crop for the next cycle (nitrogen balance, grass-legume alternation, monoculture disruption, and botanical family rotation).
 
 ---
 
@@ -14,7 +14,7 @@
 ```
 FieldShift/
 ├── backend/
-│   ├── main.py                  # FastAPI REST API + Static file server
+│   ├── main.py                  # FastAPI REST API + Security middlewares + Static server
 │   ├── analysis/
 │   │   └── indicators.py        # Monthly normals, frost probability, and rainfall anomaly calculations
 │   ├── engine/
@@ -23,15 +23,19 @@ FieldShift/
 │   ├── services/
 │   │   ├── nasa_harvester.py    # NASA telemetry service (SMAP, GPM IMERG, OpenET, HLS)
 │   │   ├── nasa_power.py        # NASA POWER agroclimatic integration (with contingency fallback)
+│   │   ├── soilgrids_service.py # ISRIC SoilGrids v2.0 REST client & pedological profiler
 │   │   └── info_semillas.json   # Agronomic catalog of 15 calibrated crops
 │   └── data/
-│       ├── cache/               # Persistent JSON cache per spatial cell (climate and satellite)
+│       ├── cache/               # Bounded LRU cache per spatial cell (climate and satellite)
 │       └── mock_comparison.json # Benchmark comparison data
 ├── frontend/
-│   └── index.html               # Modern interactive SPA (Leaflet.js, OpenStreetMap, Esri Satellite)
+│   └── index.html               # Modern interactive SPA (Leaflet.js, OpenStreetMap, Esri Satellite, Carousel)
+├── tests/
+│   └── test_soilgrids.py        # Unit and integration test suite
 ├── index.html                   # Root version for direct GitHub Pages deployment
-├── requirements.txt             # Python dependencies
-├── start.sh                     # Quickstart script (port 8088)
+├── render.yaml                  # Infrastructure as Code Blueprint for Render cloud deployment
+├── requirements.txt             # Pinned and audited Python dependencies
+├── start.sh                     # Quickstart local launch script (port 8088)
 └── README.md
 ```
 
@@ -58,7 +62,7 @@ FieldShift leverages open repositories from the **NASA Earth Science Data System
 
 ## 📡 REST API Endpoints (FastAPI Backend)
 
-The API runs by default on `http://localhost:8088`. Interactive Swagger documentation is available at `/docs`.
+The API runs locally by default on `http://localhost:8088`. Interactive Swagger documentation is available at `/docs` (in development mode).
 
 ### 1. Comprehensive Analytics & Satellite Telemetry
 * **`GET /api/v1/field-analytics`**: Returns the complete field analytics contract: geographic metadata, soil profile, NASA telemetry (SMAP, GPM, OpenET, HLS), predecessor history, ranking, and recommended succession rotation with agronomic justification.  
@@ -81,7 +85,23 @@ The API runs by default on `http://localhost:8088`. Interactive Swagger document
 * **`GET /api/v1/climate`** or **`GET /climate`**: 20-year NASA POWER historical agroclimatic indicators (normal temperatures, annual rainfall, agrometeorological frost days, heat stress days, and integrated satellite readings).  
   *Query params:* `lat`, `lon`.
 * **`POST /compare`**: Comparative simulation of rotation scenarios and agronomic priorities.
-* **`GET /health`**: Health check and operational status of the service (`{"status": "ok"}`).
+* **`GET /health`**: Fast health check and operational status of the service (`{"status": "ok"}`).
+
+---
+
+## 🛡️ Security & Hardening Architecture
+
+FieldShift complies with production pre-launch security standards:
+
+* **Sliding Window Rate Limiter:** Protects endpoints at 60 requests/minute per IP, mitigating abuse and DoS attacks (returns `HTTP 429` with `Retry-After: 60`).
+* **Active Bot & Scanner Protection:** Middleware automatically intercepts and blocks common automated vulnerability scanners (`sqlmap`, `nikto`, `masscan`, `nmap`, `dirbuster`, `nuclei`) returning `HTTP 403 Forbidden`.
+* **Input Validation & Extra Field Rejection:** Strict Pydantic models with `ConfigDict(extra="forbid")` reject parameter tampering, unauthorized payload injection, and out-of-range coordinates (`HTTP 422`).
+* **Bounded LRU Disk Cache:** Cache size capped at 500 files with automated LRU eviction to prevent storage and inode exhaustion DoS.
+* **Restricted CORS & Security Headers:** Explicit origin whitelist (`peluc4s.github.io`, `fieldshift-api.onrender.com`, controlled local ports) without wildcard credentials (`allow_credentials=False`). All HTTP responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-XSS-Protection: 1; mode=block`, and `Permissions-Policy`.
+* **DOM XSS Sanitization:** All dynamic user and telemetry data rendered into the DOM are sanitized via contextual HTML entity escaping.
+* **Safe Error Handling:** Production exception handling traps unexpected server errors, logging details securely on the server while returning sanitized, generic responses (`HTTP 500`) to the client without leaking internal stack traces.
+* **Production Debug Isolation:** Interactive Swagger docs (`/docs`, `/redoc`, `/openapi.json`) are disabled automatically in production (`ENVIRONMENT=production` or `RENDER=true`).
+* **Pinned Dependencies:** All runtime libraries in `requirements.txt` are pinned to exact audited versions to prevent supply chain drift.
 
 ---
 
@@ -114,21 +134,31 @@ The system evaluates 15 strategic agricultural crops calibrated with INTA data a
    pip install -r requirements.txt
    ```
 
-3. **Start the server:**
+3. **Run automated test suite:**
+   ```bash
+   python -m unittest tests/test_soilgrids.py
+   ```
+
+4. **Start the server:**
    ```bash
    ./start.sh
    # Or manually:
    uvicorn backend.main:app --host 127.0.0.1 --port 8088 --reload
    ```
 
-4. **Open in your browser:**
+5. **Open in your browser:**
    * **Web Application:** [http://localhost:8088](http://localhost:8088)
-   * **Interactive Swagger Docs:** [http://localhost:8088/docs](http://localhost:8088/docs)
+   * **Interactive Swagger Docs (Dev only):** [http://localhost:8088/docs](http://localhost:8088/docs)
 
 ---
 
-## 🌐 GitHub Pages Deployment (Standalone Mode)
+## 🌐 Production Deployments & Cloud Architecture
 
-FieldShift features a seamless fallback architecture:
-* If the local FastAPI backend is not active (for example, in a static demo environment), the frontend automatically activates its **built-in JavaScript agroclimatic and satellite engine** with calibrated normals and local physical models.
-* **Live Demo:** [https://cultivito.onrender.com/](https://cultivito.onrender.com/)
+FieldShift utilizes a robust hybrid deployment:
+
+* **Frontend SPA (GitHub Pages):** [https://peluc4s.github.io/FieldShift/](https://peluc4s.github.io/FieldShift/)
+  * Deployed directly from the `main` branch.
+  * Connects over HTTPS to the cloud backend API, with automatic fallback to its built-in client-side engine if offline.
+* **Backend REST API (Render):** [https://fieldshift-api.onrender.com](https://fieldshift-api.onrender.com)
+  * Managed via [render.yaml](render.yaml) Infrastructure as Code (`runtime: python`, health check at `/health`).
+  * Deploys automatically on git pushes to `version2` and `main`.
